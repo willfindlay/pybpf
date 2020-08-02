@@ -1,0 +1,43 @@
+#include <bpf/libbpf.h>
+#include <sys/resource.h>
+
+#include "SKELETON_H"
+
+void pybpf_destroy(struct BPF *bpf)
+{
+    BPF__destroy(bpf);
+}
+
+struct BPF *pybpf_open(void)
+{
+    return BPF__open();
+}
+
+int pybpf_load(struct BPF *bpf)
+{
+    return BPF__load(bpf);
+}
+
+int pybpf_attach(struct BPF *bpf)
+{
+    return BPF__attach(bpf);
+}
+
+struct bpf_object *get_bpf_object(struct BPF *bpf)
+{
+    if (!bpf) {
+        return NULL;
+    }
+
+    return bpf->obj;
+}
+
+int bump_memlock_rlimit(void)
+{
+    struct rlimit rlim_new = {
+        .rlim_cur = RLIM_INFINITY,
+        .rlim_max = RLIM_INFINITY,
+    };
+
+    return setrlimit(RLIMIT_MEMLOCK, &rlim_new);
+}
