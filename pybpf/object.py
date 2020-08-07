@@ -212,27 +212,40 @@ class BPFObjectBuilder:
 
         This skeleton file should either be shipped with your application or
         built when it is first run.
-
-        Allows the builder to skip the steps:
-            - generate_vmlinux()
-            - generate_bpf_obj_file()
-            - generate_skeleton()
-            - generate_skeleton_obj_file()
         """
         try:
             assert_exists(skeleton_obj_file)
-        except OSError:
+        except FileNotFoundError:
             skeleton_obj_file = os.path.join(self.OUTDIR, skeleton_obj_file)
         try:
             assert_exists(skeleton_obj_file)
-        except OSError:
-            raise ValueError(f'Specified skeleton object file {skeleton_obj_file} does not exist.') from None
+        except FileNotFoundError:
+            raise FileNotFoundError(f'Specified skeleton object file {skeleton_obj_file} does not exist.') from None
 
         self._skeleton_obj_file = skeleton_obj_file
 
         return self
 
-    def generate_vmlinux(self) -> 'Self':
+    def generate_skeleton(self, bpf_src: str) -> 'Self':
+        """
+        Generate the BPF skeleton object for @bpf_src.
+        This function combines the following:
+        ```
+            self._generate_vmlinux(bpf_src)
+            self._generate_bpf_obj_file(bpf_src)
+            self._generate_bpf_skeleton()
+            self._generate_skeleton_obj_file()
+        ```
+        which may be called individually for greater control.
+        """
+        self._generate_vmlinux(bpf_src)
+        self._generate_bpf_obj_file(bpf_src)
+        self._generate_bpf_skeleton()
+        self._generate_skeleton_obj_file()
+
+        return self
+
+    def _generate_vmlinux(self, bpf_src: str) -> 'Self':
         """
         Use bpftool to generate the vmlinux.h header file symlink for
         that corresponds with the BTF info for the current kernel.
@@ -247,19 +260,20 @@ class BPFObjectBuilder:
             - BTF vmlinux located at BPFObjectBuilder.VMLINUX_BTF
               ('/sys/kernel/btf/vmlinux' by default)
         """
-        self._vmlinux_kversion_h = os.path.join(self.OUTDIR, f'vmlinux_{kversion()}.h')
-        self._vmlinux_h = os.path.join(self.OUTDIR, 'vmlinux.h')
+        bpf_src_dir = os.path.dirname(bpf_src)
+        self._vmlinux_kversion_h = os.path.join(bpf_src_dir, f'vmlinux_{kversion()}.h')
+        self._vmlinux_h = os.path.join(bpf_src_dir, 'vmlinux.h')
 
         try:
             bpftool = [which('bpftool')]
-        except OSError:
+        except FileNotFoundError:
             raise OSError('bpftool not found on system. '
                     'You can install bpftool from linux/tools/bpf/bpftool '
                     'in your kernel sources.') from None
 
         try:
             assert_exists(self.VMLINUX_BTF)
-        except OSError:
+        except FileNotFoundError:
             raise OSError(f'BTF file {self.VMLINUX_BTF} does not exist. '
                     'Please build your kernel with CONFIG_DEBUG_INFO_BTF=y '
                     'or set BPFObjectBuilder.VMLINUX_BTF to the correct location.') from None
@@ -277,7 +291,7 @@ class BPFObjectBuilder:
 
         return self
 
-    def generate_bpf_obj_file(self, bpf_src: str, cflags: List[str] = []) -> 'Self':
+    def _generate_bpf_obj_file(self, bpf_src: str, cflags: List[str] = []) -> 'Self':
         """
         Compile the BPF object file from @bpf_src using clang and llvm-strip.
         Optional flags may be passed to clang using @cflags.
@@ -288,26 +302,26 @@ class BPFObjectBuilder:
         """
         try:
             assert_exists(bpf_src)
-        except OSError:
-            raise ValueError(f'Specified source file {bpf_src} does not exist.') from None
+        except FileNotFoundError:
+            raise FileNotFoundError(f'Specified source file {bpf_src} does not exist.') from None
 
         if not self._vmlinux_h or not self._vmlinux_kversion_h:
-            raise ValueError('Please generate vmlinux.h first with BPFObjectBuilder.generate_vmlinux().')
+            raise Exception('Please generate vmlinux.h first with BPFObjectBuilder.generate_vmlinux().')
 
         obj_file = os.path.join(self.OUTDIR, os.path.splitext(os.path.basename(bpf_src))[0] + '.o')
 
         try:
             clang = [which('clang')]
-        except OSError:
-            raise OSError('clang not found on system. '
+        except FileNotFoundError:
+            raise FileNotFoundError('clang not found on system. '
                     'Please install clang and try again.') from None
 
         clang_args = cflags + f'-g -O2 -target bpf -D__TARGET_ARCH_{arch()} -I{self.OUTDIR}'.split() + f'-c {bpf_src} -o {obj_file}'.split()
 
         try:
             llvm_strip = [which('llvm-strip'), '-g', obj_file]
-        except OSError:
-            raise OSError('llvm-strip not found on system. '
+        except FileNotFoundError:
+            raise FileNotFoundError('llvm-strip not found on system. '
                     'Please install llvm-strip and try again.') from None
 
         subprocess.check_call(clang + clang_args, stdout=subprocess.DEVNULL)
@@ -317,7 +331,7 @@ class BPFObjectBuilder:
 
         return self
 
-    def generate_bpf_skeleton(self) -> 'Self':
+    def _generate_bpf_skeleton(self) -> 'Self':
         """
         Use bpftool to generate the .skel.h file for the builder's
         bpf_obj_file.
@@ -330,8 +344,8 @@ class BPFObjectBuilder:
 
         try:
             bpftool = [which('bpftool')]
-        except OSError:
-            raise OSError('bpftool not found on system. '
+        except FileNotFoundError:
+            raise FileNotFoundError('bpftool not found on system. '
                     'You can install bpftool from linux/tools/bpf/bpftool '
                     'in your kernel sources.') from None
 
@@ -344,7 +358,7 @@ class BPFObjectBuilder:
 
         return self
 
-    def generate_skeleton_obj_file(self, cflags: List[str] = []) -> 'Self':
+    def _generate_skeleton_obj_file(self, cflags: List[str] = []) -> 'Self':
         """
         Generate the source code for the skeleton object file
         and compile it into a shared object using gcc.
@@ -354,8 +368,8 @@ class BPFObjectBuilder:
         """
         try:
             gcc = [which('gcc')]
-        except OSError:
-            raise OSError('gcc not found on system. '
+        except FileNotFoundError:
+            raise FileNotFoundError('gcc not found on system. '
                     'Please install gcc and try again.') from None
 
         with open(SKEL_OBJ_IN, 'r') as f:

@@ -39,18 +39,18 @@ def builder(testdir):
 
 
 def test_object_builder(builder: BPFObjectBuilder):
-    builder.generate_vmlinux()
+    builder._generate_vmlinux(os.path.join(BPF_SRC, 'hello.bpf.c'))
     assert os.path.exists(builder._vmlinux_kversion_h)
     assert os.path.exists(builder._vmlinux_h)
     assert builder._vmlinux_kversion_h == os.readlink(builder._vmlinux_h)
 
-    builder.generate_bpf_obj_file(os.path.join(BPF_SRC, 'hello.bpf.c'))
+    builder._generate_bpf_obj_file(os.path.join(BPF_SRC, 'hello.bpf.c'))
     assert os.path.exists(builder._bpf_obj_file)
 
-    builder.generate_bpf_skeleton()
+    builder._generate_bpf_skeleton()
     assert os.path.exists(builder._skeleton)
 
-    builder.generate_skeleton_obj_file()
+    builder._generate_skeleton_obj_file()
     assert os.path.exists(builder._skeleton_obj_file)
 
     builder.build()
@@ -58,14 +58,10 @@ def test_object_builder(builder: BPFObjectBuilder):
 def test_ringbuf(builder: BPFObjectBuilder):
     try:
         which('sleep')
-    except OSError:
+    except FileNotFoundError:
         pytest.skip('sleep not found on system')
 
-    obj = builder.generate_vmlinux() \
-    .generate_bpf_obj_file(os.path.join(BPF_SRC, 'ringbuf.bpf.c')) \
-    .generate_bpf_skeleton() \
-    .generate_skeleton_obj_file() \
-    .build()
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c')).build()
 
     res = 0
     res2 = 0

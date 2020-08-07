@@ -58,14 +58,14 @@ def which(program: str) -> Union[str, None]:
             if is_exe(exe_file):
                 return exe_file
 
-    raise OSError(f'Unable to find executable for {program}')
+    raise FileNotFoundError(f'Unable to find executable for {program}')
 
 def assert_exists(f: str) -> None:
     """
     Raise an OSError if file @f does not exist.
     """
     if f is None or not os.path.exists(f):
-        raise OSError(f'Unable to find {f}')
+        raise FileNotFoundError(f'Unable to find {f}')
 
 def strip_end(text, suffix):
     """
