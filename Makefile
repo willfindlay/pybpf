@@ -7,8 +7,7 @@ dev:
 
 .PHONY: test
 test:
-	$(call msg,TEST,pytest)
-	@sudo pytest
+	sudo pytest -v -ra
 
 .PHONY: libbpf
 libbpf:

@@ -21,14 +21,56 @@
 import os
 import sys
 import subprocess
+from enum import IntEnum, auto
 from ctypes import get_errno
 from typing import Union, Optional
+
+def module_path(pathname: str) -> str:
+    """
+    Get path to a file from the root directory of this module.
+    """
+    return os.path.realpath(os.path.join(os.path.dirname(__file__), pathname))
 
 def project_path(pathname: str) -> str:
     """
     Get path to a file from the root directory of this project.
     """
     return os.path.realpath(os.path.join(os.path.dirname(__file__), '..', pathname))
+
+class LibbpfErrno(IntEnum):
+    LIBELF   = 4000   # Libelf error
+    FORMAT   = auto() # BPF object format invalid
+    KVERSION = auto() # Incorrect or no 'version' section
+    ENDIAN   = auto() # Endian mismatch
+    INTERNAL = auto() # Internal error in libbpf
+    RELOC    = auto() # Relocation failed
+    LOAD     = auto() # Load program failure for unknown reason
+    VERIFY   = auto() # Kernel verifier blocks program loading
+    PROG2BIG = auto() # Program too big
+    KVER     = auto() # Incorrect kernel version
+    PROGTYPE = auto() # Kernel doesn't support this program type
+    WRNGPID  = auto() # Wrong pid in netlink message
+    INVSEQ   = auto() # Invalid netlink sequence
+    NLPARSE  = auto() # Netlink parsing error
+
+print(LibbpfErrno.LIBELF.value)
+
+libbpf_errstr = {
+        LibbpfErrno.LIBELF   : 'Libelf error',
+        LibbpfErrno.FORMAT   : 'Invalid BPF object format',
+        LibbpfErrno.KVERSION : 'Incorrect or missing version section',
+        LibbpfErrno.ENDIAN   : 'Endianness mismatch',
+        LibbpfErrno.INTERNAL : 'Internal libbpf error',
+        LibbpfErrno.RELOC    : 'Relocation failed',
+        LibbpfErrno.LOAD     : 'Unknown load failure',
+        LibbpfErrno.VERIFY   : 'Blocked by verifier',
+        LibbpfErrno.PROG2BIG : 'BPF program too large',
+        LibbpfErrno.KVER     : 'Incorrect kernel version',
+        LibbpfErrno.PROGTYPE : 'Kernel does not support this program type',
+        LibbpfErrno.WRNGPID  : 'Wrong PID in netlink message',
+        LibbpfErrno.INVSEQ   : 'Invalid netlink sequence',
+        LibbpfErrno.NLPARSE  : 'Netlink parsing error',
+        }
 
 def cerr(errno: int = None):
     """
@@ -38,7 +80,11 @@ def cerr(errno: int = None):
         errno = get_errno()
     if errno < 0:
         errno = -int(errno)
-    return f'{os.strerror(errno)} ({errno})'
+    try:
+        errstr = libbpf_errstr[LibbpfErrno(errno)]
+    except (ValueError, KeyError):
+        errstr = os.strerror(errno)
+    return f'{errstr} ({errno})'
 
 def which(program: str) -> Union[str, None]:
     """
@@ -74,7 +120,6 @@ def strip_end(text, suffix):
     if not text.endswith(suffix):
         return text
     return text[:len(text)-len(suffix)]
-
 
 def arch() -> str:
     """

@@ -17,3 +17,13 @@
 
     2020-Aug-02  William Findlay  Created this.
 """
+
+from .object import BPFObjectBuilder
+__all__ = ['BPFObjectBuilder']
+
+try:
+    from .syscall import syscall_name, syscall_num
+    __all__ += ['syscall_num', 'syscall_name']
+except Exception:
+    pass
+

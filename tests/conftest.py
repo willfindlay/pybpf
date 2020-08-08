@@ -23,6 +23,8 @@ import shutil
 
 import pytest
 
+from pybpf.object import BPFObjectBuilder
+
 TESTDIR = '/tmp/pybpf'
 
 @pytest.fixture
@@ -33,3 +35,14 @@ def testdir():
         pass
     os.makedirs(TESTDIR)
     yield TESTDIR
+
+
+@pytest.fixture
+def builder(testdir):
+    BPFObjectBuilder.OUTDIR = os.path.join(testdir, '.output')
+    builder = BPFObjectBuilder()
+    yield builder
+    try:
+        builder.bpf_object._cleanup()
+    except Exception:
+        pass
