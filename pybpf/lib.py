@@ -172,6 +172,15 @@ def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
         @skeleton_fn(skeleton, 'ring_buffer__consume')
         def ring_buffer__consume(ringbuf: ct.c_void_p) -> ct.c_int:
             pass
+
+        # ====================================================================
+        # Book Keeping
+        # ====================================================================
+
+        @skeleton_fn(skeleton, 'libbpf_num_possible_cpus')
+        def libbpf_num_possible_cpus() -> ct.c_int:
+            pass
+
     # pylint: enable=no-self-argument,no-method-argument
 
     return Lib
