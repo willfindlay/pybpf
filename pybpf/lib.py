@@ -18,83 +18,21 @@
     2020-Aug-02  William Findlay  Created this.
 """
 
+from __future__ import annotations
 import os
 import ctypes as ct
 import subprocess
-from typing import get_type_hints, Callable, List, Tuple
+from typing import get_type_hints, Callable, List, Tuple, Generator
 
 from pybpf.utils import which, arch, kversion, strip_end
 
-"""
-struct bpf_object_skeleton {
-	size_t sz; /* size of this struct, for forward/backward compatibility */
-
-	const char *name;
-	void *data;
-	size_t data_sz;
-
-	struct bpf_object **obj;
-
-	int map_cnt;
-	int map_skel_sz; /* sizeof(struct bpf_skeleton_map) */
-	struct bpf_map_skeleton *maps;
-
-	int prog_cnt;
-	int prog_skel_sz; /* sizeof(struct bpf_skeleton_prog) */
-	struct bpf_prog_skeleton *progs;
-};
-"""
-
-class BPFMapDefStruct(ct.Structure):
-    """
-    Keep this in sync with libbpf.
-    ```
-        struct bpf_map_def {
-                unsigned int type;
-                unsigned int key_size;
-                unsigned int value_size;
-                unsigned int max_entries;
-                unsigned int map_flags;
-        };
-    ```
-    """
-    _fields_ = (
-            ('type', ct.c_uint),
-            ('key_size', ct.c_uint),
-            ('value_size', ct.c_uint),
-            ('max_entries', ct.c_uint),
-            ('map_flags', ct.c_uint),
-            )
-
-# TODO: decide if this is needed
-#class BPFObjectStruct(ct.Structure):
-#    #_fields_ = ()
-#    pass
-#
-#class BPFMapSkeletonStruct(ct.Structure):
-#    #_fields_ = ()
-#    pass
-#
-#
-#class BPFObjectSkeletonStruct(ct.Structure):
-#    _fields_ = (
-#            ('name', ct.c_char_p),
-#            ('data', ct.c_void_p),
-#            ('data_sz', ct.c_size_t),
-#            ('obj', ct.POINTER(ct.POINTER(BPFObjectStruct))),
-#            ('map_cnt', ct.c_int),
-#            ('map_skel_sz', ct.c_int),
-#            ('maps', BPFMapSkeletonStruct),
-#            )
-
 _RINGBUF_CB_TYPE = ct.CFUNCTYPE(ct.c_int, ct.c_void_p, ct.c_void_p, ct.c_int)
 
-def skeleton_fn(skeleton: ct.CDLL) -> Callable:
+def skeleton_fn(skeleton: ct.CDLL, name: str) -> Callable:
     """
     A decorator that wraps a skeleton function of the same name.
     """
     def inner(func):
-        name = func.__name__
         th = get_type_hints(func)
         argtypes = [v for k, v in th.items() if k != 'return']
         try:
@@ -111,34 +49,38 @@ def skeleton_fn(skeleton: ct.CDLL) -> Callable:
         return wrapper
     return inner
 
-def create_skeleton_lib(skeleton: ct.CDLL):
+def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
+    """
+    Create a skeleton library interface.
+    Keep this in sync with libbpf and libpybpf.c.in.
+    """
     # pylint: disable=no-self-argument,no-method-argument
     class Lib:
         # ====================================================================
         # Skeleton Functions
         # ====================================================================
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'pybpf_open')
         def pybpf_open() -> ct.c_void_p:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'pybpf_load')
         def pybpf_load(bpf: ct.c_void_p) -> ct.c_int:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'pybpf_attach')
         def pybpf_attach(bpf: ct.c_void_p) -> ct.c_int:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'pybpf_destroy')
         def pybpf_destroy(bpf: ct.c_void_p) -> None:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'get_bpf_object')
         def get_bpf_object(bpf: ct.c_void_p) -> ct.c_void_p:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'bump_memlock_rlimit')
         def bump_memlock_rlimit() -> ct.c_int:
             pass
 
@@ -146,43 +88,90 @@ def create_skeleton_lib(skeleton: ct.CDLL):
         # Map Functions
         # ====================================================================
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'bpf_object__find_map_fd_by_name')
         def bpf_object__find_map_fd_by_name(obj: ct.c_void_p, name: ct.c_char_p) -> ct.c_int:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'bpf_map__fd')
         def bpf_map__fd(_map: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__type')
+        def bpf_map__type(_map: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__key_size')
+        def bpf_map__key_size(_map: ct.c_void_p) -> ct.c_uint32:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__value_size')
+        def bpf_map__value_size(_map: ct.c_void_p) -> ct.c_uint32:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__name')
+        def bpf_map__name(_map: ct.c_void_p) -> ct.c_char_p:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__max_entries')
+        def bpf_map__max_entries(_map: ct.c_void_p) -> ct.c_uint32:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__next')
+        def _bpf_map__next(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map__prev')
+        def _bpf_map__prev(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+            pass
+
+        @classmethod
+        def obj_maps(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
+            if not obj:
+                raise StopIteration('Null BPF object.')
+            _map = cls._bpf_map__next(None, obj)
+            while _map:
+                yield _map
+                _map = cls._bpf_map__next(_map, obj)
+
+        @skeleton_fn(skeleton, 'bpf_map_lookup_elem')
+        def bpf_map_lookup_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map_update_elem')
+        def bpf_map_update_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p, flags :ct.c_int) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map_delete_elem')
+        def bpf_map_delete_elem(map_fd: ct.c_int, key: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_map_get_next_key')
+        def bpf_map_get_next_key(map_fd: ct.c_int, key: ct.c_void_p, next_key: ct.c_void_p) -> ct.c_int:
             pass
 
         # ====================================================================
         # Libbpf Ringbuf
         # ====================================================================
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'ring_buffer__new')
         def ring_buffer__new(map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p, opts: ct.c_void_p) -> ct.c_void_p:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'ring_buffer__free')
         def ring_buffer__free(ringbuf: ct.c_void_p) -> None:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'ring_buffer__add')
         def ring_buffer__add(ringbuf: ct.c_void_p, map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p) -> ct.c_int:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'ring_buffer__poll')
         def ring_buffer__poll(ringbuf: ct.c_void_p, timeout_ms: ct.c_int) -> ct.c_int:
             pass
 
-        @skeleton_fn(skeleton)
+        @skeleton_fn(skeleton, 'ring_buffer__consume')
         def ring_buffer__consume(ringbuf: ct.c_void_p) -> ct.c_int:
             pass
-
-        # ====================================================================
-        # Libbpf Perfbuf
-        # ====================================================================
-
-        # TODO
     # pylint: enable=no-self-argument,no-method-argument
 
     return Lib

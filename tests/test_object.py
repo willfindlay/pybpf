@@ -22,21 +22,14 @@ import os
 import time
 import subprocess
 import ctypes as ct
+import resource
 
 import pytest
 
 from pybpf.object import BPFObjectBuilder
 from pybpf.utils import project_path, which
 
-BPF_SRC = project_path('tests/object/bpf_src')
-
-
-@pytest.fixture
-def builder(testdir):
-    BPFObjectBuilder.OUTDIR = os.path.join(testdir, '.output')
-    builder = BPFObjectBuilder()
-    yield builder
-
+BPF_SRC = project_path('tests/bpf_src')
 
 def test_object_builder(builder: BPFObjectBuilder):
     builder._generate_vmlinux(os.path.join(BPF_SRC, 'hello.bpf.c'))
@@ -55,39 +48,31 @@ def test_object_builder(builder: BPFObjectBuilder):
 
     builder.build()
 
-def test_ringbuf(builder: BPFObjectBuilder):
-    try:
-        which('sleep')
-    except FileNotFoundError:
-        pytest.skip('sleep not found on system')
 
-    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c')).build()
+def test_bump_rlimit(builder: BPFObjectBuilder):
+    resource.setrlimit(resource.RLIMIT_MEMLOCK, (65536, 65536))
 
-    res = 0
-    res2 = 0
+    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+    builder.set_bump_rlimit(False)
+    with pytest.raises(Exception):
+        builder.build()
 
-    @obj.ringbuf_callback('ringbuf', ct.c_int)
-    def _callback(ctx, data, size):
-        nonlocal res
-        res = data.value
+    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+    builder.set_bump_rlimit(True)
+    builder.build()
 
-    @obj.ringbuf_callback('ringbuf2', ct.c_int)
-    def _callback(ctx, data, size):
-        nonlocal res2
-        res2 = data.value
 
-    subprocess.check_call('sleep 1'.split())
-    obj.ringbuf_consume()
+def test_autoload(builder: BPFObjectBuilder):
+    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+    builder.set_autoload(False)
+    obj = builder.build()
+    assert obj._bpf_loaded == False
+    obj.load_bpf()
+    assert obj._bpf_loaded == True
+    obj._cleanup()
 
-    assert res == 5
-    assert res2 == 10
-
-    res = 0
-    res2 = 0
-
-    subprocess.check_call('sleep 1'.split())
-    obj.ringbuf_poll(10)
-
-    assert res == 5
-    assert res2 == 10
+    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+    builder.set_autoload(True)
+    obj = builder.build()
+    assert obj._bpf_loaded == True
 
