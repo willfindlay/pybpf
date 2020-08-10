@@ -40,11 +40,11 @@ class BPFMapType(IntEnum):
     PROG_ARRAY            = auto() # TODO
     PERF_EVENT_ARRAY      = auto() # TODO
     PERCPU_HASH           = auto()
-    PERCPU_ARRAY          = auto() # TODO
+    PERCPU_ARRAY          = auto()
     STACK_TRACE           = auto() # TODO
     CGROUP_ARRAY          = auto() # TODO
     LRU_HASH              = auto()
-    LRU_PERCPU_HASH       = auto() # TODO
+    LRU_PERCPU_HASH       = auto()
     LPM_TRIE              = auto() # TODO
     ARRAY_OF_MAPS         = auto() # TODO
     HASH_OF_MAPS          = auto() # TODO
