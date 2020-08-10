@@ -32,6 +32,9 @@ from pybpf.utils import project_path, which
 BPF_SRC = project_path('tests/bpf_src')
 
 def test_object_builder(builder: BPFObjectBuilder):
+    """
+    Test each component of the object builder.
+    """
     builder._generate_vmlinux(os.path.join(BPF_SRC, 'hello.bpf.c'))
     assert os.path.exists(builder._vmlinux_kversion_h)
     assert os.path.exists(builder._vmlinux_h)
@@ -50,6 +53,9 @@ def test_object_builder(builder: BPFObjectBuilder):
 
 
 def test_bump_rlimit(builder: BPFObjectBuilder):
+    """
+    Test turning bump_rlimit off.
+    """
     resource.setrlimit(resource.RLIMIT_MEMLOCK, (65536, 65536))
 
     builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
@@ -63,6 +69,9 @@ def test_bump_rlimit(builder: BPFObjectBuilder):
 
 
 def test_autoload(builder: BPFObjectBuilder):
+    """
+    Test turning autoload off.
+    """
     builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
     builder.set_autoload(False)
     obj = builder.build()

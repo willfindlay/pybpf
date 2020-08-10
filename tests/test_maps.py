@@ -22,6 +22,7 @@ import os
 import time
 import subprocess
 import ctypes as ct
+from multiprocessing import cpu_count
 
 import pytest
 
@@ -32,6 +33,9 @@ from pybpf.utils import project_path, which
 BPF_SRC = project_path('tests/bpf_src')
 
 def test_ringbuf(builder: BPFObjectBuilder):
+    """
+    Test that ringbuf maps can pass data to userspace from BPF programs.
+    """
     try:
         which('sleep')
     except FileNotFoundError:
@@ -68,6 +72,10 @@ def test_ringbuf(builder: BPFObjectBuilder):
     assert res2 == 10
 
 def test_bad_ringbuf(builder: BPFObjectBuilder):
+    """
+    Test that attempting to register a callback for a non-existent ringbuf
+    raises a KeyError.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c')).build()
 
     with pytest.raises(KeyError):
@@ -76,6 +84,9 @@ def test_bad_ringbuf(builder: BPFObjectBuilder):
             print('unreachable!')
 
 def test_maps_smoke(builder: BPFObjectBuilder):
+    """
+    Make sure maps load properly.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     EXPECTED_MAP_COUNT = 7
@@ -86,12 +97,18 @@ def test_maps_smoke(builder: BPFObjectBuilder):
     assert len(obj.maps) == EXPECTED_MAP_COUNT
 
 def test_bad_map(builder: BPFObjectBuilder):
+    """
+    Test that accessing a non-existent map raises a KeyError.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     with pytest.raises(KeyError):
         obj['foo']
 
 def test_hash(builder: BPFObjectBuilder):
+    """
+    Test BPF_HASH.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register key and value type
@@ -112,7 +129,7 @@ def test_hash(builder: BPFObjectBuilder):
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj['hash'][5] = 666
+        obj['hash'][obj['hash'].capacity()] = 666
 
     # Query the full map
     for i in range(obj['hash'].capacity()):
@@ -133,9 +150,39 @@ def test_hash(builder: BPFObjectBuilder):
             obj['hash'][i]
 
 def test_percpu_hash(builder: BPFObjectBuilder):
-    pytest.skip('TODO')
+    """
+    Test BPF_PERCPU_HASH.
+    """
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
+
+    percpu_hash = obj['percpu_hash']
+
+    percpu_hash.register_key_type(ct.c_int)
+    percpu_hash.register_value_type(ct.c_int)
+
+    assert len(percpu_hash) == 0
+
+    init = percpu_hash.ValueType()
+    for i in range(cpu_count()):
+        init[i] = i
+
+    for i in range(percpu_hash.capacity()):
+        percpu_hash[i] = init
+
+    assert len(percpu_hash) == percpu_hash.capacity()
+
+    for i in range(percpu_hash.capacity()):
+        for j in range(cpu_count()):
+            assert percpu_hash[i][j] == j
+
+    percpu_hash.clear()
+
+    assert len(percpu_hash) == 0
 
 def test_lru_hash(builder: BPFObjectBuilder):
+    """
+    Test BPF_LRU_HASH.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register key and value type
@@ -150,7 +197,7 @@ def test_lru_hash(builder: BPFObjectBuilder):
             obj['lru_hash'][i]
 
     # Overfill the map
-    for i in range(obj['lru_hash'].capacity()):
+    for i in range(obj['lru_hash'].capacity() + 30):
         obj['lru_hash'][i] = i
 
     assert len(obj['lru_hash']) <= obj['lru_hash'].capacity()
@@ -163,9 +210,40 @@ def test_lru_hash(builder: BPFObjectBuilder):
     assert len(obj['lru_hash']) == 0
 
 def test_lru_percpu_hash(builder: BPFObjectBuilder):
-    pytest.skip('TODO')
+    """
+    Test BPF_LRU_PERCPU_HASH.
+    """
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
+
+    lru_percpu_hash = obj['lru_percpu_hash']
+
+    lru_percpu_hash.register_key_type(ct.c_int)
+    lru_percpu_hash.register_value_type(ct.c_int)
+
+    assert len(lru_percpu_hash) == 0
+
+    init = lru_percpu_hash.ValueType()
+    for i in range(cpu_count()):
+        init[i] = i
+
+    # Overfill the map
+    for i in range(lru_percpu_hash.capacity() + 30):
+        lru_percpu_hash[i] = init
+
+    assert len(lru_percpu_hash) <= lru_percpu_hash.capacity()
+
+    for k, v in lru_percpu_hash.items():
+        for j in range(cpu_count()):
+            assert v[j] == j
+
+    lru_percpu_hash.clear()
+
+    assert len(lru_percpu_hash) == 0
 
 def test_array(builder: BPFObjectBuilder):
+    """
+    Test BPF_ARRAY.
+    """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register value type
@@ -188,7 +266,7 @@ def test_array(builder: BPFObjectBuilder):
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj['array'][5] = 666
+        obj['array'][obj['array'].capacity()] = 666
 
     # Query the full map
     for i in range(obj['array'].capacity()):
@@ -208,12 +286,39 @@ def test_array(builder: BPFObjectBuilder):
         obj['array'][i] == 0
 
 def test__percpu_array(builder: BPFObjectBuilder):
-    pytest.skip('TODO')
+    """
+    Test BPF_PERCPU_ARRAY.
+    """
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    # Register
-    #with pytest.raises(NotImplementedError):
-    #    obj['array'].register_key_type(ct.c_int)
-    #obj['array'].register_value_type(ct.c_int)
-    #with pytest.raises(NotImplementedError):
-    #    obj['percpu_array'].register_key_type(ct.c_int)
-    #obj['percpu_array'].register_value_type(ct.c_int)
+    percpu_array = obj['percpu_array']
+
+    percpu_array.register_value_type(ct.c_int)
+    # It should be impossible to change the key type
+    with pytest.raises(NotImplementedError):
+        obj['array'].register_key_type(ct.c_int)
+
+    assert len(percpu_array) == percpu_array.capacity()
+    for i in range(percpu_array.capacity()):
+        for v in percpu_array[i]:
+            assert v == 0
+
+    init = percpu_array.ValueType()
+    for i in range(cpu_count()):
+        init[i] = i
+
+    for i in range(percpu_array.capacity()):
+        percpu_array[i] = init
+
+    assert len(percpu_array) == percpu_array.capacity()
+
+    for i in range(percpu_array.capacity()):
+        for j in range(cpu_count()):
+            assert percpu_array[i][j] == j
+
+    percpu_array.clear()
+
+    assert len(percpu_array) == percpu_array.capacity()
+    for i in range(percpu_array.capacity()):
+        for v in percpu_array[i]:
+            assert v == 0

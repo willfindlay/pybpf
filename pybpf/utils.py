@@ -53,8 +53,6 @@ class LibbpfErrno(IntEnum):
     INVSEQ   = auto() # Invalid netlink sequence
     NLPARSE  = auto() # Netlink parsing error
 
-print(LibbpfErrno.LIBELF.value)
-
 libbpf_errstr = {
         LibbpfErrno.LIBELF   : 'Libelf error',
         LibbpfErrno.FORMAT   : 'Invalid BPF object format',

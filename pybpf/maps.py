@@ -24,22 +24,24 @@ from struct import pack, unpack
 from collections.abc import MutableMapping
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Callable, Any, Optional
+from typing import Callable, Any, Optional, TYPE_CHECKING
 
-from pybpf.object import BPFObject
 from pybpf.lib import _RINGBUF_CB_TYPE
 from pybpf.utils import cerr, force_bytes
+
+if TYPE_CHECKING:
+    from pybpf.object import BPFObject
 
 class BPFMapType(IntEnum):
     HASH                  = auto()
     ARRAY                 = auto()
     PROG_ARRAY            = auto() # TODO
     PERF_EVENT_ARRAY      = auto() # TODO
-    PERCPU_HASH           = auto() # TODO
+    PERCPU_HASH           = auto()
     PERCPU_ARRAY          = auto() # TODO
     STACK_TRACE           = auto() # TODO
     CGROUP_ARRAY          = auto() # TODO
-    LRU_HASH              = auto() # TODO
+    LRU_HASH              = auto()
     LRU_PERCPU_HASH       = auto() # TODO
     LPM_TRIE              = auto() # TODO
     ARRAY_OF_MAPS         = auto() # TODO
@@ -128,8 +130,8 @@ class MapBase(MutableMapping):
         """
         Register a new ctype as a value type.
         """
-        if ct.sizeof(_type) != self._ksize:
-            raise Exception(f'Mismatch between value size ({self._ksize}) and size of value type ({ct.sizeof(_type)})')
+        if ct.sizeof(_type) != self._vsize:
+            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
         self.ValueType = _type
 
     def capacity(self) -> int:
@@ -279,28 +281,89 @@ class MapBase(MutableMapping):
     def __eq__(self, other):
         return id(self) == id(other)
 
-class PerCpuMapMixin(ABC):
+class PerCpuMixin(ABC):
+    _vsize = None # type: int
     def __init__(self, *args, **kwargs):
-        pass
-        # TODO
+        try:
+            self._num_cpus = self._bpf._lib.libbpf_num_possible_cpus()
+        except AttributeError:
+            raise Exception('PerCpuMixin without BPF program?!')
+        try:
+            alignment = self._vsize % 8
+        except AttributeError:
+            raise Exception('PerCpuMixin without value size?!')
+        # Force aligned value size
+        if alignment != 0:
+            self._vsize += (8 - alignment)
+            # Make sure we are now aligned
+            alignment = self._vsize % 8
+            assert alignment == 0
+
+
+    def register_value_type(self, _type: ct.Structure):
+        """
+        Register a new ctype as a value type.
+        Value must be aligned to 8 bytes.
+        """
+        if _type in [ct.c_int, ct.c_int8, ct.c_int16, ct.c_int32, ct.c_byte, ct.c_char]:
+            _type = ct.c_int64
+        elif _type in [ct.c_uint, ct.c_uint8, ct.c_uint16, ct.c_uint32, ct.c_ubyte]:
+            _type = ct.c_uint64
+        elif ct.sizeof(_type) % 8:
+            raise ValueError('Value size for percpu maps must be 8-byte aligned')
+        if ct.sizeof(_type) != self._vsize:
+            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
+        self.ValueType = _type * self._num_cpus
 
 class Hash(MapBase):
+    """
+    A BPF hashmap.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-class LruHash(MapBase):
+class LruHash(Hash):
+    """
+    A BPF hashmap that discards least recently used entries when it is full.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-class PerCpuHash(Hash, PerCpuMapMixin):
+class PerCpuHash(Hash, PerCpuMixin):
+    """
+    A BPF hashmap that maintains unsynchonized copies per cpu.
+    """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        Hash.__init__(self, *args, **kwargs)
+        PerCpuMixin.__init__(self, *args, **kwargs)
 
-class LruPerCpuHash(LruHash, PerCpuMapMixin):
+    def register_value_type(self, _type: ct.Structure):
+        """
+        Register a new ctype as a value type.
+        Value must be aligned to 8 bytes.
+        """
+        return PerCpuMixin.register_value_type(self, _type)
+
+class LruPerCpuHash(LruHash, PerCpuMixin):
+    """
+    A BPF hashmap that maintains unsynchonized copies per cpu and discards least
+    recently used entries when it is full.
+    """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        LruHash.__init__(self, *args, **kwargs)
+        PerCpuMixin.__init__(self, *args, **kwargs)
+
+    def register_value_type(self, _type: ct.Structure):
+        """
+        Register a new ctype as a value type.
+        Value must be aligned to 8 bytes.
+        """
+        return PerCpuMixin.register_value_type(self, _type)
 
 class Array(MapBase):
+    """
+    A BPF array. Keys are always ct.c_uint.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.KeyType = ct.c_uint
@@ -313,9 +376,21 @@ class Array(MapBase):
     def __delitem__(self, key):
         self.__setitem__(key, self.ValueType())
 
-class PerCpuArray(Array, PerCpuMapMixin):
+class PerCpuArray(Array, PerCpuMixin):
+    """
+    A BPF array that maintains unsynchonized copies per cpu. Keys are always
+    ct.c_uint.
+    """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        Array.__init__(self, *args, **kwargs)
+        PerCpuMixin.__init__(self, *args, **kwargs)
+
+    def register_value_type(self, _type: ct.Structure):
+        """
+        Register a new ctype as a value type.
+        Value must be aligned to 8 bytes.
+        """
+        return PerCpuMixin.register_value_type(self, _type)
 
 class Ringbuf:
     """

@@ -24,10 +24,11 @@ import shutil
 import ctypes as ct
 import subprocess
 import atexit
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Union
 
 from pybpf.lib import create_skeleton_lib, _RINGBUF_CB_TYPE
 from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING
+from pybpf.maps import create_map, Ringbuf, MapBase
 
 SKEL_OBJ_IN = module_path('cc/libpybpf.c.in')
 
@@ -146,7 +147,6 @@ class BPFObject:
             raise Exception(f'Failed to attach BPF programs: {cerr(ret)}')
 
         # Create maps
-        from pybpf.maps import create_map
         for _map in self._lib.obj_maps(self.obj):
             map_mtype = self._lib.bpf_map__type(_map)
             map_fd = self._lib.bpf_map__fd(_map)
@@ -186,7 +186,7 @@ class BPFObject:
         if os.geteuid() != 0:
             raise OSError('You neep root privileges to load BPF programs into the kernel.')
 
-    def __getitem__(self, key: str) -> Optional[MapBase, Ringbuf]:
+    def __getitem__(self, key: str) -> Union[MapBase, Ringbuf]:
         if key not in self.maps:
             self.maps[key] = self.get_map(key)
         return self.maps[key]
