@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from pybpf.object import BPFObject
 
 class BPFMapType(IntEnum):
+    UNSPEC                = 0
     HASH                  = auto()
     ARRAY                 = auto()
     PROG_ARRAY            = auto() # TODO

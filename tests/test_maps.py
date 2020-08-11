@@ -93,10 +93,10 @@ def test_maps_smoke(builder: BPFObjectBuilder):
 
     EXPECTED_MAP_COUNT = 9
 
-    if len(obj.maps) > EXPECTED_MAP_COUNT:
-        pytest.xfail(f'EXPECTED_MAP_COUNT should be updated to {len(obj.maps)}')
+    if len(obj._maps) > EXPECTED_MAP_COUNT:
+        pytest.xfail(f'EXPECTED_MAP_COUNT should be updated to {len(obj._maps)}')
 
-    assert len(obj.maps) == EXPECTED_MAP_COUNT
+    assert len(obj._maps) == EXPECTED_MAP_COUNT
 
 def test_bad_map(builder: BPFObjectBuilder):
     """
@@ -105,7 +105,7 @@ def test_bad_map(builder: BPFObjectBuilder):
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     with pytest.raises(KeyError):
-        obj['foo']
+        obj.map('foo')
 
 def test_hash(builder: BPFObjectBuilder):
     """
@@ -114,42 +114,42 @@ def test_hash(builder: BPFObjectBuilder):
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register key and value type
-    obj['hash'].register_key_type(ct.c_int)
-    obj['hash'].register_value_type(ct.c_int)
+    obj.map('hash').register_key_type(ct.c_int)
+    obj.map('hash').register_value_type(ct.c_int)
 
-    assert len(obj['hash']) == 0
+    assert len(obj.map('hash')) == 0
 
     # Try to query the empty map
-    for i in range(obj['hash'].capacity()):
+    for i in range(obj.map('hash').capacity()):
         with pytest.raises(KeyError):
-            obj['hash'][i]
+            obj.map('hash')[i]
 
     # Fill the map
-    for i in range(obj['hash'].capacity()):
-        obj['hash'][i] = i
-    assert len(obj['hash']) == obj['hash'].capacity()
+    for i in range(obj.map('hash').capacity()):
+        obj.map('hash')[i] = i
+    assert len(obj.map('hash')) == obj.map('hash').capacity()
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj['hash'][obj['hash'].capacity()] = 666
+        obj.map('hash')[obj.map('hash').capacity()] = 666
 
     # Query the full map
-    for i in range(obj['hash'].capacity()):
-        assert obj['hash'][i].value == i
+    for i in range(obj.map('hash').capacity()):
+        assert obj.map('hash')[i].value == i
 
     # Update an existing value
-    obj['hash'][4] = 666
-    assert obj['hash'][4].value == 666
+    obj.map('hash')[4] = 666
+    assert obj.map('hash')[4].value == 666
 
     # Clear the map
-    for i in range(obj['hash'].capacity()):
-        del obj['hash'][i]
-    assert len(obj['hash']) == 0
+    for i in range(obj.map('hash').capacity()):
+        del obj.map('hash')[i]
+    assert len(obj.map('hash')) == 0
 
     # Try to query the empty map
-    for i in range(obj['hash'].capacity()):
+    for i in range(obj.map('hash').capacity()):
         with pytest.raises(KeyError):
-            obj['hash'][i]
+            obj.map('hash')[i]
 
 def test_percpu_hash(builder: BPFObjectBuilder):
     """
@@ -157,7 +157,7 @@ def test_percpu_hash(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    percpu_hash = obj['percpu_hash']
+    percpu_hash = obj.map('percpu_hash')
 
     percpu_hash.register_key_type(ct.c_int)
     percpu_hash.register_value_type(ct.c_int)
@@ -188,28 +188,28 @@ def test_lru_hash(builder: BPFObjectBuilder):
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register key and value type
-    obj['lru_hash'].register_key_type(ct.c_int)
-    obj['lru_hash'].register_value_type(ct.c_int)
+    obj.map('lru_hash').register_key_type(ct.c_int)
+    obj.map('lru_hash').register_value_type(ct.c_int)
 
-    assert len(obj['lru_hash']) == 0
+    assert len(obj.map('lru_hash')) == 0
 
     # Try to query the empty map
-    for i in range(obj['lru_hash'].capacity()):
+    for i in range(obj.map('lru_hash').capacity()):
         with pytest.raises(KeyError):
-            obj['lru_hash'][i]
+            obj.map('lru_hash')[i]
 
     # Overfill the map
-    for i in range(obj['lru_hash'].capacity() + 30):
-        obj['lru_hash'][i] = i
+    for i in range(obj.map('lru_hash').capacity() + 30):
+        obj.map('lru_hash')[i] = i
 
-    assert len(obj['lru_hash']) <= obj['lru_hash'].capacity()
+    assert len(obj.map('lru_hash')) <= obj.map('lru_hash').capacity()
 
-    for i, v in obj['lru_hash'].items():
+    for i, v in obj.map('lru_hash').items():
         assert i.value == v.value
 
-    obj['lru_hash'].clear()
+    obj.map('lru_hash').clear()
 
-    assert len(obj['lru_hash']) == 0
+    assert len(obj.map('lru_hash')) == 0
 
 def test_lru_percpu_hash(builder: BPFObjectBuilder):
     """
@@ -217,7 +217,7 @@ def test_lru_percpu_hash(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    lru_percpu_hash = obj['lru_percpu_hash']
+    lru_percpu_hash = obj.map('lru_percpu_hash')
 
     lru_percpu_hash.register_key_type(ct.c_int)
     lru_percpu_hash.register_value_type(ct.c_int)
@@ -249,43 +249,43 @@ def test_array(builder: BPFObjectBuilder):
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
     # Register value type
-    obj['array'].register_value_type(ct.c_int)
+    obj.map('array').register_value_type(ct.c_int)
 
     # It should be impossible to change the key type
     with pytest.raises(NotImplementedError):
-        obj['array'].register_key_type(ct.c_int)
+        obj.map('array').register_key_type(ct.c_int)
 
-    assert len(obj['array']) == obj['array'].capacity()
+    assert len(obj.map('array')) == obj.map('array').capacity()
 
     # Try to query the empty map
-    for i in range(obj['array'].capacity()):
-        obj['array'][i] == 0
+    for i in range(obj.map('array').capacity()):
+        obj.map('array')[i] == 0
 
     # Fill the map
-    for i in range(obj['array'].capacity()):
-        obj['array'][i] = i
-    assert len(obj['array']) == obj['array'].capacity()
+    for i in range(obj.map('array').capacity()):
+        obj.map('array')[i] = i
+    assert len(obj.map('array')) == obj.map('array').capacity()
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj['array'][obj['array'].capacity()] = 666
+        obj.map('array')[obj.map('array').capacity()] = 666
 
     # Query the full map
-    for i in range(obj['array'].capacity()):
-        assert obj['array'][i].value == i
+    for i in range(obj.map('array').capacity()):
+        assert obj.map('array')[i].value == i
 
     # Update an existing value
-    obj['array'][4] = 666
-    assert obj['array'][4].value == 666
+    obj.map('array')[4] = 666
+    assert obj.map('array')[4].value == 666
 
     # Clear the map
-    for i in range(obj['array'].capacity()):
-        del obj['array'][i]
-    assert len(obj['array']) == obj['array'].capacity()
+    for i in range(obj.map('array').capacity()):
+        del obj.map('array')[i]
+    assert len(obj.map('array')) == obj.map('array').capacity()
 
     # Try to query the empty map
-    for i in range(obj['array'].capacity()):
-        obj['array'][i] == 0
+    for i in range(obj.map('array').capacity()):
+        obj.map('array')[i] == 0
 
 def test_percpu_array(builder: BPFObjectBuilder):
     """
@@ -293,12 +293,12 @@ def test_percpu_array(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    percpu_array = obj['percpu_array']
+    percpu_array = obj.map('percpu_array')
 
     percpu_array.register_value_type(ct.c_int)
     # It should be impossible to change the key type
     with pytest.raises(NotImplementedError):
-        obj['array'].register_key_type(ct.c_int)
+        obj.map('array').register_key_type(ct.c_int)
 
     assert len(percpu_array) == percpu_array.capacity()
     for i in range(percpu_array.capacity()):
@@ -421,7 +421,7 @@ def test_queue(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    queue = obj['queue']
+    queue = obj.map('queue')
 
     queue.register_value_type(ct.c_int)
 
@@ -447,7 +447,7 @@ def test_stack(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    stack = obj['stack']
+    stack = obj.map('stack')
 
     stack.register_value_type(ct.c_int)
 

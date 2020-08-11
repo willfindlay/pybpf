@@ -31,6 +31,7 @@ from typing import List, Optional, Callable, Union
 from pybpf.lib import create_skeleton_lib, _RINGBUF_CB_TYPE
 from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING
 from pybpf.maps import create_map, Ringbuf, MapBase, QueueStack
+from pybpf.programs import create_prog
 
 SKEL_OBJ_IN = module_path('cc/libpybpf.c.in')
 
@@ -46,7 +47,8 @@ class BPFObject:
         self._bpf_loaded = False
         self._cleaned_up = False
 
-        self.maps = {}
+        self._progs = {}
+        self._maps = {}
         self._ringbuf_mgr = None
 
         if autoload:
@@ -73,7 +75,10 @@ class BPFObject:
         Optionally, the function may return a non-zero integer to indicate that
         polling should be stopped.
         """
-        return self.get_map(name).callback(data_type)
+        ringbuf = self.map(name)
+        if not isinstance(ringbuf, Ringbuf):
+            raise Exception(f'Map {name} is not a ringbuf')
+        return ringbuf.callback(data_type)
 
     def ringbuf_consume(self):
         """
@@ -150,6 +155,8 @@ class BPFObject:
 
         # Create maps
         for _map in self._lib.obj_maps(self.obj):
+            if not _map:
+                continue
             map_mtype = self._lib.bpf_map__type(_map)
             map_fd = self._lib.bpf_map__fd(_map)
             map_name = self._lib.bpf_map__name(_map).decode(FILESYSTEMENCODING)
@@ -157,18 +164,22 @@ class BPFObject:
             map_vsize = self._lib.bpf_map__value_size(_map)
             max_entries = self._lib.bpf_map__max_entries(_map)
 
-            self.maps[map_name] = create_map(self, map_fd, map_mtype, map_ksize, map_vsize, max_entries)
+            self._maps[map_name] = create_map(self, map_fd, map_mtype, map_ksize, map_vsize, max_entries)
+
+        # Create programs
+        for prog in self._lib.obj_programs(self.obj):
+            if not prog:
+                continue
+            prog_fd = self._lib.bpf_program__fd(prog)
+            prog_name = self._lib.bpf_program__name(prog).decode(FILESYSTEMENCODING)
+            prog_type = self._lib.bpf_program__get_type(prog)
+
+            self._progs[prog_name] = create_prog(self, prog_name, prog_fd, prog_type)
 
         # Make sure we clean up libbpf memory when the program exits
         atexit.register(self._cleanup)
 
         self._bpf_loaded = True
-
-    def get_map(self, name):
-        try:
-            return self.maps[name]
-        except KeyError:
-            raise KeyError(f'No such map "{name}"') from None
 
     def _cleanup(self) -> None:
         if self._cleaned_up:
@@ -188,19 +199,17 @@ class BPFObject:
         if os.geteuid() != 0:
             raise OSError('You neep root privileges to load BPF programs into the kernel.')
 
-    def __getitem__(self, key: str) -> Union[MapBase, Ringbuf, QueueStack]:
-        if key not in self.maps:
-            self.maps[key] = self.get_map(key)
-        return self.maps[key]
+    def map(self, name: str) -> Union[MapBase, Ringbuf, QueueStack]:
+        try:
+            return self._maps[name]
+        except KeyError:
+            raise KeyError(f'No such map "{name}"') from None
 
-    def __len__(self):
-        return len(self.maps)
-
-    def __delitem__(self, key):
-        del self.maps[key]
-
-    def __iter__(self):
-        return self.maps.__iter__()
+    def prog(self, name: str) -> Union[Program]:
+        try:
+            return self._progs[name]
+        except KeyError:
+            raise KeyError(f'No such program "{name}"') from None
 
 class BPFObjectBuilder:
     """
