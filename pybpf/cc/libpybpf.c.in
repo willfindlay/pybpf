@@ -19,6 +19,8 @@
  *
  * 2020-Aug-02  William Findlay  Created this. */
 
+/* WARNING: THIS FILE IS AUTO-GENERATED! DO NOT EDIT! */
+
 #include <bpf/libbpf.h>
 #include <sys/resource.h>
 

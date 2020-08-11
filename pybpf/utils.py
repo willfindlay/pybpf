@@ -22,6 +22,7 @@
 
 import os
 import sys
+import re
 import subprocess
 from enum import IntEnum, auto
 from ctypes import get_errno
@@ -121,6 +122,17 @@ def strip_end(text, suffix):
         return text
     return text[:len(text)-len(suffix)]
 
+extension_re = re.compile(r'([^\.]*)\..*')
+def strip_full_extension(pathname: str):
+    """
+    Strip an entire extension from a pathname.
+    """
+    head, tail = os.path.split(pathname)
+    match = extension_re.fullmatch(tail)
+    if match:
+        tail = match[1]
+    return os.path.join(head, tail)
+
 def arch() -> str:
     """
     Get the current system architecture.
@@ -149,3 +161,64 @@ def force_bytes(s: Union[str, bytes]):
     if not isinstance(s, bytes):
         raise Exception(f'{s} could not be converted to bytes.')
     return s
+
+def drop_privileges(function):
+    """
+    Decorator to drop root privileges.
+    """
+    def inner(*args, **kwargs):
+        # If not root, just call the function
+        if os.geteuid() != 0:
+            return function(*args, **kwargs)
+        # Get sudoer's UID
+        try:
+            sudo_uid = int(os.environ['SUDO_UID'])
+        except (KeyError, ValueError):
+            #print("Could not get UID for sudoer", file=sys.stderr)
+            # TODO log
+            return
+        # Get sudoer's GID
+        try:
+            sudo_gid = int(os.environ['SUDO_GID'])
+        except (KeyError, ValueError):
+            #print("Could not get GID for sudoer", file=sys.stderr)
+            # TODO log
+            return
+        # Make sure groups are reset
+        try:
+            os.setgroups([])
+        except PermissionError:
+            # TODO log
+            pass
+        # Drop root
+        os.setresgid(sudo_gid, sudo_gid, -1)
+        os.setresuid(sudo_uid, sudo_uid, -1)
+        # Execute function
+        ret = function(*args, **kwargs)
+        # Get root back
+        os.setresgid(0, 0, -1)
+        os.setresuid(0, 0, -1)
+        return ret
+    return inner
+
+def find_file_up_tree(fname: str, starting_dir: str = '.'):
+    """
+    Visit parent directories until we find file @fname.
+    """
+    starting_dir = os.path.abspath(starting_dir)
+
+    if not os.path.exists(starting_dir):
+        raise FileNotFoundError(f'Starting directory {starting_dir} does not exist') from None
+    if not os.path.isdir(starting_dir):
+        raise NotADirectoryError(f'Path {starting_dir} is not a directory')
+
+    head = starting_dir
+
+    while 1:
+        if fname in os.listdir(head):
+            return os.path.abspath(os.path.join(head, fname))
+        head, _tail = os.path.split(head)
+        if not head:
+            break
+
+    return None

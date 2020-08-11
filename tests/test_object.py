@@ -28,62 +28,62 @@ import resource
 
 import pytest
 
-from pybpf.object import BPFObjectBuilder
+from pybpf.project_init import ProjectInit
 from pybpf.utils import project_path, which
 
 BPF_SRC = project_path('tests/bpf_src')
 
-def test_object_builder(builder: BPFObjectBuilder):
-    """
-    Test each component of the object builder.
-    """
-    builder._generate_vmlinux(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    assert os.path.exists(builder._vmlinux_kversion_h)
-    assert os.path.exists(builder._vmlinux_h)
-    assert builder._vmlinux_kversion_h == os.readlink(builder._vmlinux_h)
-
-    builder._generate_bpf_obj_file(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    assert os.path.exists(builder._bpf_obj_file)
-
-    builder._generate_bpf_skeleton()
-    assert os.path.exists(builder._skeleton)
-
-    builder._generate_skeleton_obj_file()
-    assert os.path.exists(builder._skeleton_obj_file)
-
-    builder.build()
-
-
-def test_bump_rlimit(builder: BPFObjectBuilder):
-    """
-    Test turning bump_rlimit off.
-    """
-    resource.setrlimit(resource.RLIMIT_MEMLOCK, (65536, 65536))
-
-    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    builder.set_bump_rlimit(False)
-    with pytest.raises(Exception):
-        builder.build()
-
-    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    builder.set_bump_rlimit(True)
-    builder.build()
+#def test_object_init(init: ProjectInit):
+#    """
+#    Test each component of the object init.
+#    """
+#    init._generate_vmlinux(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    assert os.path.exists(init._vmlinux_kversion_h)
+#    assert os.path.exists(init._vmlinux_h)
+#    assert init._vmlinux_kversion_h == os.readlink(init._vmlinux_h)
+#
+#    init._generate_bpf_obj_file(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    assert os.path.exists(init._bpf_obj_file)
+#
+#    init._generate_bpf_skeleton()
+#    assert os.path.exists(init._skeleton)
+#
+#    init._compile_bpf_skeleton_obj_file()
+#    assert os.path.exists(init._skeleton_obj_file)
+#
+#    init
 
 
-def test_autoload(builder: BPFObjectBuilder):
-    """
-    Test turning autoload off.
-    """
-    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    builder.set_autoload(False)
-    obj = builder.build()
-    assert obj._bpf_loaded == False
-    obj.load_bpf()
-    assert obj._bpf_loaded == True
-    obj._cleanup()
-
-    builder.generate_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
-    builder.set_autoload(True)
-    obj = builder.build()
-    assert obj._bpf_loaded == True
-
+#def test_bump_rlimit(init: ProjectInit):
+#    """
+#    Test turning bump_rlimit off.
+#    """
+#    resource.setrlimit(resource.RLIMIT_MEMLOCK, (65536, 65536))
+#
+#    init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    init.set_bump_rlimit(False)
+#    with pytest.raises(Exception):
+#        init
+#
+#    init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    init.set_bump_rlimit(True)
+#    init
+#
+#
+#def test_autoload(init: ProjectInit):
+#    """
+#    Test turning autoload off.
+#    """
+#    init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    init.set_autoload(False)
+#    obj = init
+#    assert obj._bpf_loaded == False
+#    obj.load_bpf()
+#    assert obj._bpf_loaded == True
+#    obj._cleanup()
+#
+#    init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'hello.bpf.c'))
+#    init.set_autoload(True)
+#    obj = init
+#    assert obj._bpf_loaded == True
+#

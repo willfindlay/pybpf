@@ -25,9 +25,15 @@ import shutil
 
 import pytest
 
-from pybpf.object import BPFObjectBuilder
+from pybpf.project_init import ProjectInit
+from pybpf.utils import drop_privileges
+from pybpf.object import BPFObject
 
 TESTDIR = '/tmp/pybpf'
+
+@drop_privileges
+def make_testdir():
+    os.makedirs(TESTDIR)
 
 @pytest.fixture
 def testdir():
@@ -35,16 +41,11 @@ def testdir():
         shutil.rmtree(TESTDIR)
     except FileNotFoundError:
         pass
-    os.makedirs(TESTDIR)
+    make_testdir()
     yield TESTDIR
 
-
 @pytest.fixture
-def builder(testdir):
-    BPFObjectBuilder.OUTDIR = os.path.join(testdir, '.output')
-    builder = BPFObjectBuilder()
-    yield builder
-    try:
-        builder.bpf_object._cleanup()
-    except Exception:
-        pass
+def init(testdir):
+    init = ProjectInit(project_dir=TESTDIR, output_dir=TESTDIR)
+    init.generate_vmlinux()
+    yield init

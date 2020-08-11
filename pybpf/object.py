@@ -29,8 +29,9 @@ import atexit
 from typing import List, Optional, Callable, Union
 
 from pybpf.lib import create_skeleton_lib, _RINGBUF_CB_TYPE
-from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING
+from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING, strip_full_extension, drop_privileges
 from pybpf.maps import create_map, Ringbuf, MapBase, QueueStack
+from pybpf.programs import create_prog, ProgBase
 
 SKEL_OBJ_IN = module_path('cc/libpybpf.c.in')
 
@@ -39,14 +40,15 @@ class BPFObject:
     A BPF object. This class should not be instantiated directly.
     Instead, create it using BPFObjectBuilder.
     """
-    def __init__(self, skeleton_obj_file: str, bump_rlimit: bool, autoload: bool):
+    def __init__(self, skeleton_obj_file: str, bump_rlimit: bool = True, autoload: bool = True):
         self._lib = create_skeleton_lib(ct.CDLL(skeleton_obj_file))
 
         self._bump_rlimit = bump_rlimit
         self._bpf_loaded = False
         self._cleaned_up = False
 
-        self.maps = {}
+        self._progs = {}
+        self._maps = {}
         self._ringbuf_mgr = None
 
         if autoload:
@@ -73,7 +75,10 @@ class BPFObject:
         Optionally, the function may return a non-zero integer to indicate that
         polling should be stopped.
         """
-        return self.get_map(name).callback(data_type)
+        ringbuf = self.map(name)
+        if not isinstance(ringbuf, Ringbuf):
+            raise Exception(f'Map {name} is not a ringbuf')
+        return ringbuf.callback(data_type)
 
     def ringbuf_consume(self):
         """
@@ -150,6 +155,8 @@ class BPFObject:
 
         # Create maps
         for _map in self._lib.obj_maps(self.obj):
+            if not _map:
+                continue
             map_mtype = self._lib.bpf_map__type(_map)
             map_fd = self._lib.bpf_map__fd(_map)
             map_name = self._lib.bpf_map__name(_map).decode(FILESYSTEMENCODING)
@@ -157,18 +164,22 @@ class BPFObject:
             map_vsize = self._lib.bpf_map__value_size(_map)
             max_entries = self._lib.bpf_map__max_entries(_map)
 
-            self.maps[map_name] = create_map(self, map_fd, map_mtype, map_ksize, map_vsize, max_entries)
+            self._maps[map_name] = create_map(self, map_fd, map_mtype, map_ksize, map_vsize, max_entries)
+
+        # Create programs
+        for prog in self._lib.obj_programs(self.obj):
+            if not prog:
+                continue
+            prog_fd = self._lib.bpf_program__fd(prog)
+            prog_name = self._lib.bpf_program__name(prog).decode(FILESYSTEMENCODING)
+            prog_type = self._lib.bpf_program__get_type(prog)
+
+            self._progs[prog_name] = create_prog(self, prog_name, prog_fd, prog_type)
 
         # Make sure we clean up libbpf memory when the program exits
         atexit.register(self._cleanup)
 
         self._bpf_loaded = True
-
-    def get_map(self, name):
-        try:
-            return self.maps[name]
-        except KeyError:
-            raise KeyError(f'No such map "{name}"') from None
 
     def _cleanup(self) -> None:
         if self._cleaned_up:
@@ -188,286 +199,14 @@ class BPFObject:
         if os.geteuid() != 0:
             raise OSError('You neep root privileges to load BPF programs into the kernel.')
 
-    def __getitem__(self, key: str) -> Union[MapBase, Ringbuf, QueueStack]:
-        if key not in self.maps:
-            self.maps[key] = self.get_map(key)
-        return self.maps[key]
-
-    def __len__(self):
-        return len(self.maps)
-
-    def __delitem__(self, key):
-        del self.maps[key]
-
-    def __iter__(self):
-        return self.maps.__iter__()
-
-class BPFObjectBuilder:
-    """
-    Builds a BPF object.
-
-    For development, make the following calls in sequence:
-    ```
-        builder = BPFObjectBuilder()
-        builder.generate_vmlinux()
-        builder.generate_bpf_obj_file()
-        builder.generate_skeleton()
-        builder.generate_skeleton_obj_file()
-        obj = builder.build()
-    ```
-
-    For production, you can bootstrap using the generated skeleton object file:
-    ```
-        obj = BPFObjectBuilder().use_existing_skeleton('my_program.skel.so').build()
-    ```
-    """
-
-    VMLINUX_BTF = '/sys/kernel/btf/vmlinux'
-    OUTDIR      = '.output'
-    PYBPF_H     = module_path('cc/pybpf.bpf.h')
-
-    def __init__(self):
-        self._vmlinux_kversion_h : str = None
-        self._vmlinux_h          : str = None
-        self._bpf_obj_file       : str = None
-        self._skeleton           : str = None
-        self._skeleton_obj_file  : str = None
-        self._bump_rlimit        : bool = True
-        self._autoload           : bool = True
-
-        self.bpf_object = None
-
-        self.OUTDIR = os.path.abspath(self.OUTDIR)
-
-        os.makedirs(self.OUTDIR, exist_ok=True)
-
-    def use_existing_skeleton(self, skeleton_obj_file: str) -> BPFObjectBuilder:
-        """
-        For use in production.  Use an existing skeleton object file
-        @skeleton_obj_file rather than generating a new one.
-
-        This skeleton file should either be shipped with your application or
-        built when it is first run.
-        """
+    def map(self, name: str) -> Union[MapBase, Ringbuf, QueueStack]:
         try:
-            assert_exists(skeleton_obj_file)
-        except FileNotFoundError:
-            skeleton_obj_file = os.path.join(self.OUTDIR, skeleton_obj_file)
+            return self._maps[name]
+        except KeyError:
+            raise KeyError(f'No such map "{name}"') from None
+
+    def prog(self, name: str) -> Union[ProgBase]:
         try:
-            assert_exists(skeleton_obj_file)
-        except FileNotFoundError:
-            raise FileNotFoundError(f'Specified skeleton object file {skeleton_obj_file} does not exist.') from None
-
-        self._skeleton_obj_file = os.path.abspath(skeleton_obj_file)
-
-        return self
-
-    def generate_skeleton(self, bpf_src: str) -> BPFObjectBuilder:
-        """
-        Generate the BPF skeleton object for @bpf_src.
-        This function combines the following:
-        ```
-            self._generate_vmlinux(bpf_src)
-            self._generate_bpf_obj_file(bpf_src)
-            self._generate_bpf_skeleton()
-            self._generate_skeleton_obj_file()
-        ```
-        which may be called individually for greater control.
-        """
-        bpf_src = os.path.abspath(bpf_src)
-
-        self._generate_vmlinux(bpf_src)
-        self._generate_bpf_obj_file(bpf_src)
-        self._generate_bpf_skeleton()
-        self._generate_skeleton_obj_file()
-
-        return self
-
-    def _generate_vmlinux(self, bpf_src: str) -> BPFObjectBuilder:
-        """
-        Use bpftool to generate the vmlinux.h header file symlink for
-        that corresponds with the BTF info for the current kernel.
-
-        Creates a file "{BPFObjectBuilder.OUTDIR}/vmlinux_{kversion()}.h"
-        and a symbolic link "{BPFObjectBuilder.OUTDIR}/vmlinux.h" that
-        points to it.
-
-        Requires:
-            - A recent version of bpftool in your $PATH.
-            - A kernel compiled with CONFIG_DEBUG_INFO_BTF=y.
-            - BTF vmlinux located at BPFObjectBuilder.VMLINUX_BTF
-              ('/sys/kernel/btf/vmlinux' by default)
-        """
-        bpf_src_dir = os.path.dirname(bpf_src)
-        self._vmlinux_kversion_h = os.path.join(bpf_src_dir, f'vmlinux_{kversion()}.h')
-        self._vmlinux_h = os.path.join(bpf_src_dir, 'vmlinux.h')
-
-        try:
-            bpftool = [which('bpftool')]
-        except FileNotFoundError:
-            raise OSError('bpftool not found on system. '
-                    'You can install bpftool from linux/tools/bpf/bpftool '
-                    'in your kernel sources.') from None
-
-        try:
-            assert_exists(self.VMLINUX_BTF)
-        except FileNotFoundError:
-            raise OSError(f'BTF file {self.VMLINUX_BTF} does not exist. '
-                    'Please build your kernel with CONFIG_DEBUG_INFO_BTF=y '
-                    'or set BPFObjectBuilder.VMLINUX_BTF to the correct location.') from None
-
-        bpftool_args = f'btf dump file {self.VMLINUX_BTF} format c'.split()
-
-        with open(self._vmlinux_kversion_h, 'w+') as f:
-            subprocess.check_call(bpftool + bpftool_args, stdout=f)
-
-        try:
-            os.unlink(self._vmlinux_h)
-        except FileNotFoundError:
-            pass
-        os.symlink(self._vmlinux_kversion_h, self._vmlinux_h)
-
-        # TODO maybe move this into a CLI bootstrapping tool?
-        shutil.copy(self.PYBPF_H, bpf_src_dir)
-
-        return self
-
-    def _generate_bpf_obj_file(self, bpf_src: str, cflags: List[str] = []) -> BPFObjectBuilder:
-        """
-        Compile the BPF object file from @bpf_src using clang and llvm-strip.
-        Optional flags may be passed to clang using @cflags.
-
-        Requires:
-            - A recent clang in $PATH.
-            - A recent llvm-strip in $PATH.
-        """
-        try:
-            assert_exists(bpf_src)
-        except FileNotFoundError:
-            raise FileNotFoundError(f'Specified source file {bpf_src} does not exist.') from None
-
-        if not self._vmlinux_h or not self._vmlinux_kversion_h:
-            raise Exception('Please generate vmlinux.h first with BPFObjectBuilder.generate_vmlinux().')
-
-        obj_file = os.path.join(self.OUTDIR, os.path.splitext(os.path.basename(bpf_src))[0] + '.o')
-
-        try:
-            clang = [which('clang')]
-        except FileNotFoundError:
-            raise FileNotFoundError('clang not found on system. '
-                    'Please install clang and try again.') from None
-
-        auto_includes = module_path('cc/auto_includes.bpf.h')
-
-        clang_args = cflags + f'-g -O2 -target bpf -D__TARGET_ARCH_{arch()} -I{self.OUTDIR}'.split() + f'-c {bpf_src} -o {obj_file}'.split()
-
-        try:
-            llvm_strip = [which('llvm-strip'), '-g', obj_file]
-        except FileNotFoundError:
-            raise FileNotFoundError('llvm-strip not found on system. '
-                    'Please install llvm-strip and try again.') from None
-
-        subprocess.check_call(clang + clang_args, stdout=subprocess.DEVNULL)
-        subprocess.check_call(llvm_strip, stdout=subprocess.DEVNULL)
-
-        self._bpf_obj_file = obj_file
-
-        return self
-
-    def _generate_bpf_skeleton(self) -> BPFObjectBuilder:
-        """
-        Use bpftool to generate the .skel.h file for the builder's
-        bpf_obj_file.
-
-        Requires:
-            - A recent version of bpftool in your $PATH.
-            - A kernel compiled with CONFIG_DEBUG_INFO_BTF=y.
-        """
-        skel_h = os.path.splitext(self._bpf_obj_file)[0] + '.skel.h'
-
-        try:
-            bpftool = [which('bpftool')]
-        except FileNotFoundError:
-            raise FileNotFoundError('bpftool not found on system. '
-                    'You can install bpftool from linux/tools/bpf/bpftool '
-                    'in your kernel sources.') from None
-
-        bpftool_args = f'gen skeleton {self._bpf_obj_file}'.split()
-
-        with open(skel_h, 'w+') as f:
-            subprocess.check_call(bpftool + bpftool_args, stdout=f)
-
-        self._skeleton = skel_h
-
-        return self
-
-    def _generate_skeleton_obj_file(self, cflags: List[str] = []) -> BPFObjectBuilder:
-        """
-        Generate the source code for the skeleton object file
-        and compile it into a shared object using gcc.
-
-        Requires:
-            - A recent gcc in $PATH.
-        """
-        try:
-            gcc = [which('gcc')]
-        except FileNotFoundError:
-            raise FileNotFoundError('gcc not found on system. '
-                    'Please install gcc and try again.') from None
-
-        with open(SKEL_OBJ_IN, 'r') as f:
-            skel = f.read()
-
-        skel_c = os.path.splitext(self._bpf_obj_file)[0] + '.skel.c'
-        skel_so = os.path.splitext(self._bpf_obj_file)[0] + '.skel.so'
-
-        prefix = os.path.splitext(os.path.basename(self._bpf_obj_file))[0].replace('.', '_').replace('-', '_')
-        skel = skel.replace('SKELETON_H', self._skeleton)
-        skel = skel.replace('BPF', prefix)
-
-        with open(skel_c, 'w+') as f:
-            f.write(skel)
-
-        gcc_args = cflags + f'-shared -lbpf -lelf -lz -O2 -o {skel_so} {skel_c}'.split()
-
-        self._skeleton_obj_file = skel_so
-
-        subprocess.check_call(gcc + gcc_args, stdout=subprocess.DEVNULL)
-
-        return self
-
-    def set_bump_rlimit(self, bump_rlimit: bool) -> BPFObjectBuilder:
-        """
-        Decide whether the BPF program should implicitly bump rlimit to
-        infinity.  This option defaults to True. Disabling it allows you more
-        control, but you will need to remember to bump rlimit manually.
-        """
-        self._bump_rlimit = bump_rlimit
-
-        return self
-
-    def set_autoload(self, autoload: bool) -> BPFObjectBuilder:
-        """
-        Decide whether the BPF program should automatically load BPF programs.
-        This option defaults to True. Disabling it gives you more control,
-        but requires that you remember to call obj.load_bpf after building.
-        """
-        self._autoload = autoload
-
-        return self
-
-    def build(self) -> BPFObject:
-        """
-        Build the BPF object. Requires a skeleton object file to be either
-        generated or provided using the
-        `BPFObjectBuilder.use_existing_skeleton('my_program.skel.so')` shortcut.
-        """
-        if not self._skeleton_obj_file:
-            raise Exception('You must build or provide an existing skeleton object file.')
-
-        bpf_object = BPFObject(self._skeleton_obj_file, self._bump_rlimit, self._autoload)
-
-        self.__init__()
-        self.bpf_object = bpf_object
-
-        return bpf_object
+            return self._progs[name]
+        except KeyError:
+            raise KeyError(f'No such program "{name}"') from None

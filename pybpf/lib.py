@@ -180,6 +180,43 @@ def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
             pass
 
         # ====================================================================
+        # Program Functions
+        # ====================================================================
+
+        @skeleton_fn(skeleton, 'bpf_program__fd')
+        def bpf_program__fd(prog: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_program__get_type')
+        def bpf_program__get_type(prog: ct.c_void_p) -> ct.c_int:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_program__name')
+        def bpf_program__name(prog: ct.c_void_p) -> ct.c_char_p:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_program__next')
+        def _bpf_program__next(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+            pass
+
+        @skeleton_fn(skeleton, 'bpf_program__prev')
+        def _bpf_program__prev(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+            pass
+
+        @classmethod
+        def obj_programs(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
+            if not obj:
+                raise StopIteration('Null BPF object.')
+            prog = cls._bpf_program__next(None, obj)
+            while prog:
+                yield prog
+                prog = cls._bpf_program__next(prog, obj)
+
+        @skeleton_fn(skeleton, 'bpf_prog_test_run')
+        def bpf_prog_test_run(prog_fd: ct.c_int, repeat: ct.c_int, data: ct.c_void_p, data_size: ct.c_uint32, data_out: ct.c_void_p, data_out_size: ct.POINTER(ct.c_uint32), retval: ct.POINTER(ct.c_uint32), duration: ct.POINTER(ct.c_uint32)) -> ct.c_int:
+            pass
+
+        # ====================================================================
         # Uprobe Attachment
         # ====================================================================
 

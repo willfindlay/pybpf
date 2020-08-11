@@ -20,8 +20,11 @@
     2020-Aug-02  William Findlay  Created this.
 """
 
-from .object import BPFObjectBuilder
-__all__ = ['BPFObjectBuilder']
+from .pybpf import main
+from .object import BPFObject
+from .project_init import ProjectInit
+
+__all__ = ['BPFObject', 'ProjectInit']
 
 try:
     from .syscall import syscall_name, syscall_num
