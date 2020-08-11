@@ -1,6 +1,6 @@
 # PyBPF 🐍💞🐝
 
-An opinionated libbpf/BPF CO-RE library for the Python3 (read Python 3.6+) ecosystem.
+An opinionated libbpf/BPF CO-RE (Compile Once---Run Everywhere) library for the Python3 (read Python 3.6+) ecosystem.
 
 **DISCLAIMER:** This library is in **pre-alpha** version and changes may result in
 API breakages. Pre-release version API breakages will be accompanied by a minor
@@ -34,6 +34,8 @@ breakages will require a bump in major version number.
     - `LRU_PERCPU_HASH`
     - `ARRAY`
     - `PERCPU_ARRAY`
+    - `QUEUE`
+    - `STACK`
 
 **Coming Features**
 - The following map types:
@@ -52,8 +54,6 @@ breakages will require a bump in major version number.
     - `CGROUP_STORAGE`
     - `REUSEPORT_SOCKARRAY`
     - `PERCPU_CGROUP_STORAGE`
-    - `QUEUE`
-    - `STACK`
     - `SK_STORAGE`
     - `DEVMAP_HASH`
     - `STRUCT_OPS`

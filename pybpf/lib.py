@@ -147,6 +147,10 @@ def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
         def bpf_map_delete_elem(map_fd: ct.c_int, key: ct.c_void_p) -> ct.c_int:
             pass
 
+        @skeleton_fn(skeleton, 'bpf_map_lookup_and_delete_elem')
+        def bpf_map_lookup_and_delete_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
+            pass
+
         @skeleton_fn(skeleton, 'bpf_map_get_next_key')
         def bpf_map_get_next_key(map_fd: ct.c_int, key: ct.c_void_p, next_key: ct.c_void_p) -> ct.c_int:
             pass
@@ -173,6 +177,14 @@ def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
 
         @skeleton_fn(skeleton, 'ring_buffer__consume')
         def ring_buffer__consume(ringbuf: ct.c_void_p) -> ct.c_int:
+            pass
+
+        # ====================================================================
+        # Uprobe Attachment
+        # ====================================================================
+
+        @skeleton_fn(skeleton, 'bpf_program__attach_uprobe')
+        def bpf_program__attach_uprobe(prog: ct.c_void_p, retprobe: ct.c_bool, pid: ct.c_int, binary_path: ct.c_char_p, func_offset: ct.c_size_t) -> ct.c_void_p:
             pass
 
         # ====================================================================

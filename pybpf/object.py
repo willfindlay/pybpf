@@ -30,7 +30,7 @@ from typing import List, Optional, Callable, Union
 
 from pybpf.lib import create_skeleton_lib, _RINGBUF_CB_TYPE
 from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING
-from pybpf.maps import create_map, Ringbuf, MapBase
+from pybpf.maps import create_map, Ringbuf, MapBase, QueueStack
 
 SKEL_OBJ_IN = module_path('cc/libpybpf.c.in')
 
@@ -188,7 +188,7 @@ class BPFObject:
         if os.geteuid() != 0:
             raise OSError('You neep root privileges to load BPF programs into the kernel.')
 
-    def __getitem__(self, key: str) -> Union[MapBase, Ringbuf]:
+    def __getitem__(self, key: str) -> Union[MapBase, Ringbuf, QueueStack]:
         if key not in self.maps:
             self.maps[key] = self.get_map(key)
         return self.maps[key]

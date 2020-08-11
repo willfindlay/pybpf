@@ -42,7 +42,7 @@ class BPFMapType(IntEnum):
     PERCPU_HASH           = auto()
     PERCPU_ARRAY          = auto()
     STACK_TRACE           = auto() # TODO
-    CGROUP_ARRAY          = auto() # TODO
+    CGROUP_ARRAY          = auto()
     LRU_HASH              = auto()
     LRU_PERCPU_HASH       = auto()
     LPM_TRIE              = auto() # TODO
@@ -53,11 +53,11 @@ class BPFMapType(IntEnum):
     CPUMAP                = auto() # TODO
     XSKMAP                = auto() # TODO
     SOCKHASH              = auto() # TODO
-    CGROUP_STORAGE        = auto() # TODO
+    CGROUP_STORAGE        = auto()
     REUSEPORT_SOCKARRAY   = auto() # TODO
     PERCPU_CGROUP_STORAGE = auto() # TODO
-    QUEUE                 = auto() # TODO
-    STACK                 = auto() # TODO
+    QUEUE                 = auto()
+    STACK                 = auto()
     SK_STORAGE            = auto() # TODO
     DEVMAP_HASH           = auto() # TODO
     STRUCT_OPS            = auto() # TODO
@@ -91,8 +91,20 @@ def create_map(bpf: BPFObject, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_in
     if mtype == BPFMapType.ARRAY:
         return Array(bpf, map_fd, ksize, vsize, max_entries)
 
+    if mtype == BPFMapType.CGROUP_ARRAY:
+        return CgroupArray(bpf, map_fd, ksize, vsize, max_entries)
+
     if mtype == BPFMapType.PERCPU_ARRAY:
         return PerCpuArray(bpf, map_fd, ksize, vsize, max_entries)
+
+    if mtype == BPFMapType.CGROUP_STORAGE:
+        return CgroupStorage(bpf, map_fd, ksize, vsize, max_entries)
+
+    if mtype == BPFMapType.STACK:
+        return Stack(bpf, map_fd, ksize, vsize, max_entries)
+
+    if mtype == BPFMapType.QUEUE:
+        return Queue(bpf, map_fd, ksize, vsize, max_entries)
 
     if mtype == BPFMapType.RINGBUF:
         return Ringbuf(bpf, map_fd)
@@ -246,7 +258,7 @@ class MapBase(MutableMapping):
             pass
         ret = self._bpf._lib.bpf_map_update_elem(self._map_fd, ct.byref(key), ct.byref(value), flags)
         if ret < 0:
-            raise KeyError(f'Unable to update item item: {cerr(ret)}')
+            raise KeyError(f'Unable to update item: {cerr(ret)}')
 
     def __getitem__(self, key):
         value = self.ValueType()
@@ -331,7 +343,7 @@ class LruHash(Hash):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-class PerCpuHash(Hash, PerCpuMixin):
+class PerCpuHash(PerCpuMixin, Hash):
     """
     A BPF hashmap that maintains unsynchonized copies per cpu.
     """
@@ -339,14 +351,7 @@ class PerCpuHash(Hash, PerCpuMixin):
         Hash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
-    def register_value_type(self, _type: ct.Structure):
-        """
-        Register a new ctype as a value type.
-        Value must be aligned to 8 bytes.
-        """
-        return PerCpuMixin.register_value_type(self, _type)
-
-class LruPerCpuHash(LruHash, PerCpuMixin):
+class LruPerCpuHash(PerCpuMixin, LruHash):
     """
     A BPF hashmap that maintains unsynchonized copies per cpu and discards least
     recently used entries when it is full.
@@ -354,13 +359,6 @@ class LruPerCpuHash(LruHash, PerCpuMixin):
     def __init__(self, *args, **kwargs):
         LruHash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
-
-    def register_value_type(self, _type: ct.Structure):
-        """
-        Register a new ctype as a value type.
-        Value must be aligned to 8 bytes.
-        """
-        return PerCpuMixin.register_value_type(self, _type)
 
 class Array(MapBase):
     """
@@ -371,14 +369,44 @@ class Array(MapBase):
         self.KeyType = ct.c_uint
 
     def register_key_type(self, _type: ct.Structure):
-        if _type == ct.c_uint:
-            return
         raise NotImplementedError('Arrays always have key type ct.c_uint. This cannot be changed')
 
     def __delitem__(self, key):
         self.__setitem__(key, self.ValueType())
 
-class PerCpuArray(Array, PerCpuMixin):
+class CgroupArray(Array):
+    """
+    A BPF array that contains cgroup file descriptors. Userspace is expected to
+    populate this map by getting a cgroup-backed fd by calling open(2) on
+    a cgroup directory. Then, update the map to contain the cgroup fd.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.KeyType = ct.c_uint
+        self.ValueType = ct.c_uint
+
+    def register_value_type(self, _type: ct.Structure):
+        raise NotImplementedError('Cgroup always have value type ct.c_uint. This cannot be changed')
+
+    def register_key_type(self, _type: ct.Structure):
+        raise NotImplementedError('Cgroup always have key type ct.c_uint. This cannot be changed')
+
+    def append_cgroup(self, cgroup_path: str) -> int:
+        """
+        A helper to get the cgroup fd associated with the directory @cgroup_path
+        and append its file descriptor to the map. Returns the array index that
+        was updated on success.
+        """
+        with open(cgroup_path, 'r') as f:
+            fd = f.fileno
+        if fd < 0:
+            raise Exception(f'Unable to get file descriptor for cgroup {cgroup_path}')
+        key = len(self)
+        self.__setitem__(key, fd)
+        return key
+
+class PerCpuArray(PerCpuMixin, Array):
     """
     A BPF array that maintains unsynchonized copies per cpu. Keys are always
     ct.c_uint.
@@ -387,12 +415,96 @@ class PerCpuArray(Array, PerCpuMixin):
         Array.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
+class CgroupStorage(MapBase):
+    """
+    A BPF map that maintains per-cgroup value storage. Elements of this map
+    may not be created or deleted. Instead, they are automatically created
+    or deleted when a BPF program is attached to a cgroup.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def register_key_type(self, _type: ct.Structure):
+        raise NotImplementedError('Cgroup local storage maps always have a specific key type. This cannot be changed')
+
+    def __delitem__(self, key):
+        raise NotImplementedError('Local storage maps may not delete their elements')
+
+class QueueStack(ABC):
+    """
+    A base class for BPF stacks and queues.
+    """
+    def __init__(self, bpf: BPFObject, map_fd: int, ksize: int, vsize: int, max_entries: int):
+        self._bpf = bpf
+        self._map_fd = map_fd
+        self._ksize = ksize
+        self._vsize = vsize
+        self._max_entries = max_entries
+
+        self.ValueType = self._no_value_type
+
+    def _no_value_type(self, *args, **kwargs):
+        raise Exception(f'Please define a ctype for value using {self.__class__.__name__}.register_value_type(ctype)')
+
     def register_value_type(self, _type: ct.Structure):
         """
         Register a new ctype as a value type.
-        Value must be aligned to 8 bytes.
         """
-        return PerCpuMixin.register_value_type(self, _type)
+        if ct.sizeof(_type) != self._vsize:
+            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
+        self.ValueType = _type
+
+    def capacity(self) -> int:
+        """
+        Return the capacity of the map in entries.
+        """
+        return self._max_entries
+
+    def push(self, value: self.ValueType, flags: int = 0):
+        """
+        Push an element onto the map.
+        """
+        try:
+            value = self.ValueType(value)
+        except TypeError:
+            pass
+        ret = self._bpf._lib.bpf_map_update_elem(self._map_fd, None, ct.byref(value), flags)
+        if ret < 0:
+            raise KeyError(f'Unable to push value: {cerr(ret)}')
+
+    def pop(self) -> self.ValueType:
+        """
+        Pop an element from the map.
+        """
+        value = self.ValueType()
+        ret = self._bpf._lib.bpf_map_lookup_and_delete_elem(self._map_fd, None, ct.byref(value))
+        if ret < 0:
+            raise KeyError(f'Unable to pop value: {cerr(ret)}')
+        return value
+
+    def peek(self):
+        """
+        Peek an element from the map.
+        """
+        value = self.ValueType()
+        ret = self._bpf._lib.bpf_map_lookup_elem(self._map_fd, None, ct.byref(value))
+        if ret < 0:
+            raise KeyError(f'Unable to peek value: {cerr(ret)}')
+        return value
+
+class Queue(QueueStack):
+    """
+    A BPF Queue map. Implements a FIFO data structure without a key type.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class Stack(QueueStack):
+    """
+    A BPF Stack map. Implements a LIFO data structure without a key type.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 class Ringbuf:
     """

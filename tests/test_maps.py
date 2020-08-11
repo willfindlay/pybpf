@@ -91,7 +91,7 @@ def test_maps_smoke(builder: BPFObjectBuilder):
     """
     obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
 
-    EXPECTED_MAP_COUNT = 7
+    EXPECTED_MAP_COUNT = 9
 
     if len(obj.maps) > EXPECTED_MAP_COUNT:
         pytest.xfail(f'EXPECTED_MAP_COUNT should be updated to {len(obj.maps)}')
@@ -287,7 +287,7 @@ def test_array(builder: BPFObjectBuilder):
     for i in range(obj['array'].capacity()):
         obj['array'][i] == 0
 
-def test__percpu_array(builder: BPFObjectBuilder):
+def test_percpu_array(builder: BPFObjectBuilder):
     """
     Test BPF_PERCPU_ARRAY.
     """
@@ -324,3 +324,164 @@ def test__percpu_array(builder: BPFObjectBuilder):
     for i in range(percpu_array.capacity()):
         for v in percpu_array[i]:
             assert v == 0
+
+def test_prog_array(builder: BPFObjectBuilder):
+    """
+    Test BPF_PROG_ARRAY.
+    """
+    pytest.skip('TODO')
+
+def test_perf_event_array(builder: BPFObjectBuilder):
+    """
+    Test BPF_PERF_EVENT_ARRAY.
+    """
+    pytest.skip('TODO')
+
+def test_stack_trace(builder: BPFObjectBuilder):
+    """
+    Test BPF_STACK_TRACE.
+    """
+    pytest.skip('TODO')
+
+def test_cgroup_array(builder: BPFObjectBuilder):
+    """
+    Test BPF_CGROUP_ARRAY.
+    """
+    pytest.skip('TODO')
+
+def test_lpm_trie(builder: BPFObjectBuilder):
+    """
+    Test BPF_LPM_TRIE.
+    """
+    pytest.skip('TODO')
+
+def test_array_of_maps(builder: BPFObjectBuilder):
+    """
+    Test BPF_ARRAY_OF_MAPS.
+    """
+    pytest.skip('TODO')
+
+def test_hash_of_maps(builder: BPFObjectBuilder):
+    """
+    Test BPF_HASH_OF_MAPS.
+    """
+    pytest.skip('TODO')
+
+def test_devmap(builder: BPFObjectBuilder):
+    """
+    Test BPF_DEVMAP.
+    """
+    pytest.skip('TODO')
+
+def test_sockmap(builder: BPFObjectBuilder):
+    """
+    Test BPF_SOCKMAP.
+    """
+    pytest.skip('TODO')
+
+def test_cpumap(builder: BPFObjectBuilder):
+    """
+    Test BPF_CPUMAP.
+    """
+    pytest.skip('TODO')
+
+def test_xskmap(builder: BPFObjectBuilder):
+    """
+    Test BPF_XSKMAP.
+    """
+    pytest.skip('TODO')
+
+def test_sockhash(builder: BPFObjectBuilder):
+    """
+    Test BPF_SOCKHASH.
+    """
+    pytest.skip('TODO')
+
+def test_cgroup_storage(builder: BPFObjectBuilder):
+    """
+    Test BPF_CGROUP_STORAGE.
+    """
+    pytest.skip('TODO')
+
+def test_reuseport_sockarray(builder: BPFObjectBuilder):
+    """
+    Test BPF_REUSEPORT_SOCKARRAY.
+    """
+    pytest.skip('TODO')
+
+def test_percpu_cgroup_storage(builder: BPFObjectBuilder):
+    """
+    Test BPF_PERCPU_CGROUP_STORAGE.
+    """
+    pytest.skip('TODO')
+
+def test_queue(builder: BPFObjectBuilder):
+    """
+    Test BPF_QUEUE.
+    """
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
+
+    queue = obj['queue']
+
+    queue.register_value_type(ct.c_int)
+
+    for i in range(queue.capacity()):
+        queue.push(i)
+
+    with pytest.raises(KeyError):
+        queue.push(666)
+
+    for i in range(queue.capacity()):
+        assert queue.peek().value == i
+        assert queue.peek().value == queue.pop().value
+
+    with pytest.raises(KeyError):
+        queue.peek()
+
+    with pytest.raises(KeyError):
+        queue.pop()
+
+def test_stack(builder: BPFObjectBuilder):
+    """
+    Test BPF_STACK.
+    """
+    obj = builder.generate_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c')).build()
+
+    stack = obj['stack']
+
+    stack.register_value_type(ct.c_int)
+
+    for i in range(stack.capacity()):
+        stack.push(i)
+
+    with pytest.raises(KeyError):
+        stack.push(666)
+
+    for i in reversed(range(stack.capacity())):
+        assert stack.peek().value == i
+        assert stack.peek().value == stack.pop().value
+
+    with pytest.raises(KeyError):
+        stack.peek()
+
+    with pytest.raises(KeyError):
+        stack.pop()
+
+def test_sk_storage(builder: BPFObjectBuilder):
+    """
+    Test BPF_SK_STORAGE.
+    """
+    pytest.skip('TODO')
+
+def test_devmap_hash(builder: BPFObjectBuilder):
+    """
+    Test BPF_DEVMAP_HASH.
+    """
+    pytest.skip('TODO')
+
+def test_struct_ops(builder: BPFObjectBuilder):
+    """
+    Test BPF_STRUCT_OPS.
+    """
+    pytest.skip('TODO')
+
