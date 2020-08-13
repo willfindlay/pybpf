@@ -25,9 +25,14 @@ import shutil
 
 import pytest
 
+from pybpf.utils import drop_privileges
 from pybpf.object import BPFObjectBuilder
 
 TESTDIR = '/tmp/pybpf'
+
+@drop_privileges
+def make_testdir():
+    os.makedirs(TESTDIR)
 
 @pytest.fixture
 def testdir():
@@ -35,7 +40,7 @@ def testdir():
         shutil.rmtree(TESTDIR)
     except FileNotFoundError:
         pass
-    os.makedirs(TESTDIR)
+    make_testdir()
     yield TESTDIR
 
 

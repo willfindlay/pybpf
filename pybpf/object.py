@@ -29,9 +29,9 @@ import atexit
 from typing import List, Optional, Callable, Union
 
 from pybpf.lib import create_skeleton_lib, _RINGBUF_CB_TYPE
-from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING
+from pybpf.utils import kversion, arch, which, assert_exists, module_path, cerr, force_bytes, FILESYSTEMENCODING, strip_full_extension, drop_privileges
 from pybpf.maps import create_map, Ringbuf, MapBase, QueueStack
-from pybpf.programs import create_prog
+from pybpf.programs import create_prog, ProgBase
 
 SKEL_OBJ_IN = module_path('cc/libpybpf.c.in')
 
@@ -205,7 +205,7 @@ class BPFObject:
         except KeyError:
             raise KeyError(f'No such map "{name}"') from None
 
-    def prog(self, name: str) -> Union[Program]:
+    def prog(self, name: str) -> Union[ProgBase]:
         try:
             return self._progs[name]
         except KeyError:
@@ -246,10 +246,7 @@ class BPFObjectBuilder:
 
         self.bpf_object = None
 
-        self.OUTDIR = os.path.abspath(self.OUTDIR)
-
-        os.makedirs(self.OUTDIR, exist_ok=True)
-
+    @drop_privileges
     def use_existing_skeleton(self, skeleton_obj_file: str) -> BPFObjectBuilder:
         """
         For use in production.  Use an existing skeleton object file
@@ -261,7 +258,7 @@ class BPFObjectBuilder:
         try:
             assert_exists(skeleton_obj_file)
         except FileNotFoundError:
-            skeleton_obj_file = os.path.join(self.OUTDIR, skeleton_obj_file)
+            skeleton_obj_file = os.path.join(self._outdir, skeleton_obj_file)
         try:
             assert_exists(skeleton_obj_file)
         except FileNotFoundError:
@@ -271,6 +268,7 @@ class BPFObjectBuilder:
 
         return self
 
+    @drop_privileges
     def generate_skeleton(self, bpf_src: str) -> BPFObjectBuilder:
         """
         Generate the BPF skeleton object for @bpf_src.
@@ -292,13 +290,14 @@ class BPFObjectBuilder:
 
         return self
 
+    @drop_privileges
     def _generate_vmlinux(self, bpf_src: str) -> BPFObjectBuilder:
         """
         Use bpftool to generate the vmlinux.h header file symlink for
         that corresponds with the BTF info for the current kernel.
 
-        Creates a file "{BPFObjectBuilder.OUTDIR}/vmlinux_{kversion()}.h"
-        and a symbolic link "{BPFObjectBuilder.OUTDIR}/vmlinux.h" that
+        Creates a file "{BPFObjectBuilder._outdir}/vmlinux_{kversion()}.h"
+        and a symbolic link "{BPFObjectBuilder._outdir}/vmlinux.h" that
         points to it.
 
         Requires:
@@ -307,9 +306,14 @@ class BPFObjectBuilder:
             - BTF vmlinux located at BPFObjectBuilder.VMLINUX_BTF
               ('/sys/kernel/btf/vmlinux' by default)
         """
-        bpf_src_dir = os.path.dirname(bpf_src)
-        self._vmlinux_kversion_h = os.path.join(bpf_src_dir, f'vmlinux_{kversion()}.h')
-        self._vmlinux_h = os.path.join(bpf_src_dir, 'vmlinux.h')
+        self._bpf_src_dir = os.path.realpath(os.path.dirname(bpf_src))
+        if not os.path.isabs(self.OUTDIR):
+            self._outdir = os.path.join(self._bpf_src_dir, self.OUTDIR)
+        else:
+            self._outdir = self.OUTDIR
+        os.makedirs(self._outdir, exist_ok=True)
+        self._vmlinux_kversion_h = os.path.join(self._bpf_src_dir, f'vmlinux_{kversion()}.h')
+        self._vmlinux_h = os.path.join(self._bpf_src_dir, 'vmlinux.h')
 
         try:
             bpftool = [which('bpftool')]
@@ -337,10 +341,11 @@ class BPFObjectBuilder:
         os.symlink(self._vmlinux_kversion_h, self._vmlinux_h)
 
         # TODO maybe move this into a CLI bootstrapping tool?
-        shutil.copy(self.PYBPF_H, bpf_src_dir)
+        shutil.copy(self.PYBPF_H, self._bpf_src_dir)
 
         return self
 
+    @drop_privileges
     def _generate_bpf_obj_file(self, bpf_src: str, cflags: List[str] = []) -> BPFObjectBuilder:
         """
         Compile the BPF object file from @bpf_src using clang and llvm-strip.
@@ -358,7 +363,7 @@ class BPFObjectBuilder:
         if not self._vmlinux_h or not self._vmlinux_kversion_h:
             raise Exception('Please generate vmlinux.h first with BPFObjectBuilder.generate_vmlinux().')
 
-        obj_file = os.path.join(self.OUTDIR, os.path.splitext(os.path.basename(bpf_src))[0] + '.o')
+        obj_file = os.path.join(self._outdir, strip_full_extension(os.path.basename(bpf_src)) + '.bpf.o')
 
         try:
             clang = [which('clang')]
@@ -366,9 +371,7 @@ class BPFObjectBuilder:
             raise FileNotFoundError('clang not found on system. '
                     'Please install clang and try again.') from None
 
-        auto_includes = module_path('cc/auto_includes.bpf.h')
-
-        clang_args = cflags + f'-g -O2 -target bpf -D__TARGET_ARCH_{arch()} -I{self.OUTDIR}'.split() + f'-c {bpf_src} -o {obj_file}'.split()
+        clang_args = cflags + f'-g -O2 -target bpf -D__TARGET_ARCH_{arch()} -I{self._outdir}'.split() + f'-c {bpf_src} -o {obj_file}'.split()
 
         try:
             llvm_strip = [which('llvm-strip'), '-g', obj_file]
@@ -383,6 +386,7 @@ class BPFObjectBuilder:
 
         return self
 
+    @drop_privileges
     def _generate_bpf_skeleton(self) -> BPFObjectBuilder:
         """
         Use bpftool to generate the .skel.h file for the builder's
@@ -392,7 +396,7 @@ class BPFObjectBuilder:
             - A recent version of bpftool in your $PATH.
             - A kernel compiled with CONFIG_DEBUG_INFO_BTF=y.
         """
-        skel_h = os.path.splitext(self._bpf_obj_file)[0] + '.skel.h'
+        skel_h = strip_full_extension(self._bpf_obj_file) + '.skel.h'
 
         try:
             bpftool = [which('bpftool')]
@@ -410,6 +414,7 @@ class BPFObjectBuilder:
 
         return self
 
+    @drop_privileges
     def _generate_skeleton_obj_file(self, cflags: List[str] = []) -> BPFObjectBuilder:
         """
         Generate the source code for the skeleton object file
@@ -427,8 +432,8 @@ class BPFObjectBuilder:
         with open(SKEL_OBJ_IN, 'r') as f:
             skel = f.read()
 
-        skel_c = os.path.splitext(self._bpf_obj_file)[0] + '.skel.c'
-        skel_so = os.path.splitext(self._bpf_obj_file)[0] + '.skel.so'
+        skel_c = strip_full_extension(self._bpf_obj_file) + '.skel.c'
+        skel_so = strip_full_extension(self._bpf_obj_file) + '.skel.so'
 
         prefix = os.path.splitext(os.path.basename(self._bpf_obj_file))[0].replace('.', '_').replace('-', '_')
         skel = skel.replace('SKELETON_H', self._skeleton)
