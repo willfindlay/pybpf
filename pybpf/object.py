@@ -258,10 +258,6 @@ class BPFObjectBuilder:
         try:
             assert_exists(skeleton_obj_file)
         except FileNotFoundError:
-            skeleton_obj_file = os.path.join(self._outdir, skeleton_obj_file)
-        try:
-            assert_exists(skeleton_obj_file)
-        except FileNotFoundError:
             raise FileNotFoundError(f'Specified skeleton object file {skeleton_obj_file} does not exist.') from None
 
         self._skeleton_obj_file = os.path.abspath(skeleton_obj_file)

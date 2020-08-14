@@ -30,7 +30,6 @@ from distutils.command.build_ext import build_ext
 NAME = 'pybpf'
 VERSION = '0.0.1'
 
-
 setup(
     name=NAME,
     version=VERSION,
