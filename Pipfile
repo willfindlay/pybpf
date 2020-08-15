@@ -1,0 +1,16 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+jedi = "*"
+pylint = "*"
+pytest = "*"
+wrapt = {editable = true, path = "."}
+
+[packages]
+click = "*"
+
+[requires]
+python_version = "3.8"
