@@ -167,6 +167,9 @@ def drop_privileges(function):
     Decorator to drop root privileges.
     """
     def inner(*args, **kwargs):
+        # If not root, just call the function
+        if os.geteuid() != 0:
+            return function(*args, **kwargs)
         # Get sudoer's UID
         try:
             sudo_uid = int(os.environ['SUDO_UID'])

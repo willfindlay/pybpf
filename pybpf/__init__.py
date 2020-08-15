@@ -20,7 +20,9 @@
     2020-Aug-02  William Findlay  Created this.
 """
 
+from .pybpf import main
 from .object import BPFObjectBuilder
+
 __all__ = ['BPFObjectBuilder']
 
 try:

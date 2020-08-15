@@ -233,7 +233,6 @@ class BPFObjectBuilder:
 
     VMLINUX_BTF = '/sys/kernel/btf/vmlinux'
     OUTDIR      = '.output'
-    PYBPF_H     = module_path('cc/pybpf.bpf.h')
 
     def __init__(self):
         self._vmlinux_kversion_h : str = None
@@ -335,9 +334,6 @@ class BPFObjectBuilder:
         except FileNotFoundError:
             pass
         os.symlink(self._vmlinux_kversion_h, self._vmlinux_h)
-
-        # TODO maybe move this into a CLI bootstrapping tool?
-        shutil.copy(self.PYBPF_H, self._bpf_src_dir)
 
         return self
 
