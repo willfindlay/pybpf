@@ -79,7 +79,7 @@ def create_prog(bpf: BPFObject, prog_name: str, prog_fd: ct.c_int, prog_type: ct
 
     # Construct prog based on prog type
     try:
-        return prog_type2class[prog_type](bpf, prog_name, prog_fd)
+        return progtype2class[prog_type](bpf, prog_name, prog_fd)
     except KeyError:
         pass
 
@@ -248,7 +248,7 @@ class ProgSkLookup(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-prog_type2class = {
+progtype2class = {
     BPFProgType.SOCKET_FILTER: ProgSocketFilter,
     BPFProgType.KPROBE: ProgKprobe,
     BPFProgType.SCHED_CLS: ProgSchedCls,

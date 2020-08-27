@@ -72,43 +72,15 @@ def create_map(bpf: BPFObject, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_in
     """
     # Convert map type to enum
     try:
-        mtype = BPFMapType(mtype)
+        map_type = BPFMapType(mtype)
     except ValueError:
-        mtype = BPFMapType.MAP_TYPE_UNKNOWN
+        map_type = BPFMapType.MAP_TYPE_UNKNOWN
 
     # Construct map based on map type
-    if mtype == BPFMapType.HASH:
-        return Hash(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.LRU_HASH:
-        return LruHash(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.LRU_PERCPU_HASH:
-        return LruPerCpuHash(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.PERCPU_HASH:
-        return PerCpuHash(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.ARRAY:
-        return Array(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.CGROUP_ARRAY:
-        return CgroupArray(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.PERCPU_ARRAY:
-        return PerCpuArray(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.CGROUP_STORAGE:
-        return CgroupStorage(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.STACK:
-        return Stack(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.QUEUE:
-        return Queue(bpf, map_fd, ksize, vsize, max_entries)
-
-    if mtype == BPFMapType.RINGBUF:
-        return Ringbuf(bpf, map_fd)
+    try:
+        return maptype2class[map_type](bpf, map_fd, ksize, vsize, max_entries)
+    except KeyError:
+        pass
 
     # Fall through
     raise ValueError(f'No map implementation for {mtype.name}')
@@ -512,7 +484,7 @@ class Ringbuf:
     A ringbuf map for passing per-event data to userspace. This class should not
     be instantiated directly. Instead, it is created automatically by the BPFObject.
     """
-    def __init__(self, bpf: BPFObject, map_fd: int):
+    def __init__(self, bpf: BPFObject, map_fd: int, *args, **kwargs):
         self.bpf = bpf
         self.map_fd = map_fd
 
@@ -581,3 +553,17 @@ class Ringbuf:
                 raise Exception(f'Failed to add ringbuf to ring buffer manager: {cerr(ret)}')
         # Keep a refcnt so that our function doesn't get cleaned up
         self._cb = func
+
+maptype2class = {
+    BPFMapType.HASH: Hash,
+    BPFMapType.LRU_HASH: LruHash,
+    BPFMapType.LRU_PERCPU_HASH: LruPerCpuHash,
+    BPFMapType.PERCPU_HASH: PerCpuHash,
+    BPFMapType.ARRAY: Array,
+    BPFMapType.CGROUP_ARRAY: CgroupArray,
+    BPFMapType.PERCPU_ARRAY: PerCpuArray,
+    BPFMapType.CGROUP_STORAGE: CgroupStorage,
+    BPFMapType.STACK: Stack,
+    BPFMapType.QUEUE: Queue,
+    BPFMapType.RINGBUF: Ringbuf,
+}
