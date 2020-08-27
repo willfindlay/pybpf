@@ -24,13 +24,21 @@ from __future__ import annotations
 import ctypes as ct
 from enum import IntEnum, auto
 from abc import ABC
-from typing import Callable, Any, Optional, TYPE_CHECKING
+from typing import Callable, Any, Optional, Type, TYPE_CHECKING
 
 from pybpf.lib import _RINGBUF_CB_TYPE
 from pybpf.utils import cerr, force_bytes
 
 if TYPE_CHECKING:
     from pybpf.object import BPFObject
+
+progtype2class = {}
+
+def register_prog(prog_type: BPFProgType):
+    def inner(prog: Type[ProgBase]):
+        progtype2class[prog_type] = prog
+        return prog
+    return inner
 
 class BPFProgType(IntEnum):
     UNSPEC                  = 0
@@ -122,10 +130,12 @@ class ProgBase(ABC):
         bpf_retval = ct.c_int16(bpf_ret.value)
         return bpf_retval.value
 
+@register_prog(BPFProgType.SOCKET_FILTER)
 class ProgSocketFilter(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.KPROBE)
 class ProgKprobe(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -133,14 +143,17 @@ class ProgKprobe(ProgBase):
     def invoke(self, data: ct.Structure = None):
         raise NotImplementedError(f'{self.__class__.__name__} programs cannot yet be invoked with bpf_prog_test_run.')
 
+@register_prog(BPFProgType.SCHED_CLS)
 class ProgSchedCls(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SCHED_ACT)
 class ProgSchedAct(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.TRACEPOINT)
 class ProgTracepoint(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -148,135 +161,127 @@ class ProgTracepoint(ProgBase):
     def invoke(self, data: ct.Structure = None):
         raise NotImplementedError(f'{self.__class__.__name__} programs cannot yet be invoked with bpf_prog_test_run.')
 
+@register_prog(BPFProgType.XDP)
 class ProgXdp(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.PERF_EVENT)
 class ProgPerfEvent(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_SKB)
 class ProgCgroupSkb(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_SOCK)
 class ProgCgroupSock(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.LWT_IN)
 class ProgLwtIn(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.LWT_OUT)
 class ProgLwtOut(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.LWT_XMIT)
 class ProgLwtXmit(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SOCK_OPS)
 class ProgSockOps(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SK_SKB)
 class ProgSkSkb(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_DEVICE)
 class ProgCgroupDevice(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SK_MSG)
 class ProgSkMsg(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.RAW_TRACEPOINT)
 class ProgRawTracepoint(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_SOCK_ADDR)
 class ProgCgroupSockAddr(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-class ProgLwtSeg6local:
+@register_prog(BPFProgType.LWT_SEG6LOCAL)
+class ProgLwtSeg6local(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-class ProgLircMode2:
+@register_prog(BPFProgType.LIRC_MODE2)
+class ProgLircMode2(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SK_REUSEPORT)
 class ProgSkReuseport(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.FLOW_DISSECTOR)
 class ProgFlowDissector(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_SYSCTL)
 class ProgCgroupSysctl(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.RAW_TRACEPOINT_WRITABLE)
 class ProgRawTracepointWritable(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.CGROUP_SOCKOPT)
 class ProgCgroupSockopt(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.TRACING)
 class ProgTracing(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.STRUCT_OPS)
 class ProgStructOps(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.EXT)
 class ProgExt(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.LSM)
 class ProgLsm(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_prog(BPFProgType.SK_LOOKUP)
 class ProgSkLookup(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-progtype2class = {
-    BPFProgType.SOCKET_FILTER: ProgSocketFilter,
-    BPFProgType.KPROBE: ProgKprobe,
-    BPFProgType.SCHED_CLS: ProgSchedCls,
-    BPFProgType.SCHED_ACT: ProgSchedAct,
-    BPFProgType.TRACEPOINT: ProgTracepoint,
-    BPFProgType.XDP: ProgXdp,
-    BPFProgType.PERF_EVENT: ProgPerfEvent,
-    BPFProgType.CGROUP_SKB: ProgCgroupSkb,
-    BPFProgType.CGROUP_SOCK: ProgCgroupSock,
-    BPFProgType.LWT_IN: ProgLwtIn,
-    BPFProgType.LWT_OUT: ProgLwtOut,
-    BPFProgType.LWT_XMIT: ProgLwtXmit,
-    BPFProgType.SOCK_OPS: ProgSockOps,
-    BPFProgType.SK_SKB: ProgSkSkb,
-    BPFProgType.CGROUP_DEVICE: ProgCgroupDevice,
-    BPFProgType.SK_MSG: ProgSkMsg,
-    BPFProgType.RAW_TRACEPOINT: ProgRawTracepoint,
-    BPFProgType.CGROUP_SOCK_ADDR: ProgCgroupSockAddr,
-    BPFProgType.LWT_SEG6LOCAL: ProgLwtSeg6local,
-    BPFProgType.LIRC_MODE2: ProgLircMode2,
-    BPFProgType.SK_REUSEPORT: ProgSkReuseport,
-    BPFProgType.FLOW_DISSECTOR: ProgFlowDissector,
-    BPFProgType.CGROUP_SYSCTL: ProgCgroupSysctl,
-    BPFProgType.RAW_TRACEPOINT_WRITABLE: ProgRawTracepointWritable,
-    BPFProgType.CGROUP_SOCKOPT: ProgCgroupSockopt,
-    BPFProgType.TRACING: ProgTracing,
-    BPFProgType.STRUCT_OPS: ProgStructOps,
-    BPFProgType.EXT: ProgExt,
-    BPFProgType.LSM: ProgLsm,
-    BPFProgType.SK_LOOKUP: ProgSkLookup,
-}

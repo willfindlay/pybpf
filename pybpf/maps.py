@@ -26,13 +26,21 @@ from struct import pack, unpack
 from collections.abc import MutableMapping
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Callable, Any, Optional, TYPE_CHECKING
+from typing import Callable, Any, Optional, Type, TYPE_CHECKING
 
 from pybpf.lib import _RINGBUF_CB_TYPE
 from pybpf.utils import cerr, force_bytes
 
 if TYPE_CHECKING:
     from pybpf.object import BPFObject
+
+maptype2class = {}
+
+def register_map(map_type: BPFMapType):
+    def inner(_map: Type[MapBase]):
+        maptype2class[map_type] = _map
+        return _map
+    return inner
 
 class BPFMapType(IntEnum):
     UNSPEC                = 0
@@ -302,6 +310,7 @@ class PerCpuMixin(ABC):
             raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
         self.ValueType = _type * self._num_cpus
 
+@register_map(BPFMapType.HASH)
 class Hash(MapBase):
     """
     A BPF hashmap.
@@ -309,6 +318,7 @@ class Hash(MapBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_map(BPFMapType.LRU_HASH)
 class LruHash(Hash):
     """
     A BPF hashmap that discards least recently used entries when it is full.
@@ -316,6 +326,7 @@ class LruHash(Hash):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_map(BPFMapType.PERCPU_HASH)
 class PerCpuHash(PerCpuMixin, Hash):
     """
     A BPF hashmap that maintains unsynchonized copies per cpu.
@@ -324,6 +335,7 @@ class PerCpuHash(PerCpuMixin, Hash):
         Hash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
+@register_map(BPFMapType.LRU_PERCPU_HASH)
 class LruPerCpuHash(PerCpuMixin, LruHash):
     """
     A BPF hashmap that maintains unsynchonized copies per cpu and discards least
@@ -333,6 +345,7 @@ class LruPerCpuHash(PerCpuMixin, LruHash):
         LruHash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
+@register_map(BPFMapType.ARRAY)
 class Array(MapBase):
     """
     A BPF array. Keys are always ct.c_uint.
@@ -347,6 +360,7 @@ class Array(MapBase):
     def __delitem__(self, key):
         self.__setitem__(key, self.ValueType())
 
+@register_map(BPFMapType.CGROUP_ARRAY)
 class CgroupArray(Array):
     """
     A BPF array that contains cgroup file descriptors. Userspace is expected to
@@ -379,6 +393,7 @@ class CgroupArray(Array):
         self.__setitem__(key, fd)
         return key
 
+@register_map(BPFMapType.PERCPU_ARRAY)
 class PerCpuArray(PerCpuMixin, Array):
     """
     A BPF array that maintains unsynchonized copies per cpu. Keys are always
@@ -388,6 +403,7 @@ class PerCpuArray(PerCpuMixin, Array):
         Array.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
+@register_map(BPFMapType.CGROUP_STORAGE)
 class CgroupStorage(MapBase):
     """
     A BPF map that maintains per-cgroup value storage. Elements of this map
@@ -465,6 +481,7 @@ class QueueStack(ABC):
             raise KeyError(f'Unable to peek value: {cerr(ret)}')
         return value
 
+@register_map(BPFMapType.QUEUE)
 class Queue(QueueStack):
     """
     A BPF Queue map. Implements a FIFO data structure without a key type.
@@ -472,6 +489,7 @@ class Queue(QueueStack):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_map(BPFMapType.STACK)
 class Stack(QueueStack):
     """
     A BPF Stack map. Implements a LIFO data structure without a key type.
@@ -479,6 +497,7 @@ class Stack(QueueStack):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+@register_map(BPFMapType.RINGBUF)
 class Ringbuf:
     """
     A ringbuf map for passing per-event data to userspace. This class should not
@@ -553,17 +572,3 @@ class Ringbuf:
                 raise Exception(f'Failed to add ringbuf to ring buffer manager: {cerr(ret)}')
         # Keep a refcnt so that our function doesn't get cleaned up
         self._cb = func
-
-maptype2class = {
-    BPFMapType.HASH: Hash,
-    BPFMapType.LRU_HASH: LruHash,
-    BPFMapType.LRU_PERCPU_HASH: LruPerCpuHash,
-    BPFMapType.PERCPU_HASH: PerCpuHash,
-    BPFMapType.ARRAY: Array,
-    BPFMapType.CGROUP_ARRAY: CgroupArray,
-    BPFMapType.PERCPU_ARRAY: PerCpuArray,
-    BPFMapType.CGROUP_STORAGE: CgroupStorage,
-    BPFMapType.STACK: Stack,
-    BPFMapType.QUEUE: Queue,
-    BPFMapType.RINGBUF: Ringbuf,
-}
