@@ -34,15 +34,22 @@ from pybpf.utils import cerr, force_bytes
 if TYPE_CHECKING:
     from pybpf.object import BPFObject
 
+# Maps map type to map class
 maptype2class = {}
 
 def register_map(map_type: BPFMapType):
+    """
+    Decorates a class to register if with the corresponding :IntEnum:BPFMapType.
+    """
     def inner(_map: Type[MapBase]):
         maptype2class[map_type] = _map
         return _map
     return inner
 
 class BPFMapType(IntEnum):
+    """
+    Integer enum representing BPF map types.
+    """
     UNSPEC                = 0
     HASH                  = auto()
     ARRAY                 = auto()

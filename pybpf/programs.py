@@ -32,15 +32,22 @@ from pybpf.utils import cerr, force_bytes
 if TYPE_CHECKING:
     from pybpf.object import BPFObject
 
+# Maps prog type to prog class
 progtype2class = {}
 
 def register_prog(prog_type: BPFProgType):
+    """
+    Decorates a class to register if with the corresponding :IntEnum:BPFProgType.
+    """
     def inner(prog: Type[ProgBase]):
         progtype2class[prog_type] = prog
         return prog
     return inner
 
 class BPFProgType(IntEnum):
+    """
+    Integer enum representing BPF program types.
+    """
     UNSPEC                  = 0
     SOCKET_FILTER           = auto()
     KPROBE                  = auto()
