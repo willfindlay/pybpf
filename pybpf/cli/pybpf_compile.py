@@ -17,17 +17,27 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
     USA
 
-    2020-Aug-02  William Findlay  Created this.
+    2020-Aug-27  William Findlay  Created this.
 """
 
-from .object import BPFObject
-from .project_init import ProjectInit
+import os
+import logging
 
-__all__ = ['BPFObject', 'ProjectInit']
+import click
 
-try:
-    from .syscall import syscall_name, syscall_num
-    __all__ += ['syscall_num', 'syscall_name']
-except Exception:
-    pass
+from pybpf.project_init import ProjectInit
+from pybpf.cli.aliased_group import AliasedGroup
+
+logger = logging.getLogger(__name__)
+
+@click.command(help='Build the BPF skeleton object.')
+@click.help_option('-h', '--help')
+def build():
+    project_dir = os.path.abspath('.')
+
+    proj_init = ProjectInit(project_dir=project_dir)
+    try:
+        proj_init.compile_bpf_skeleton()
+    except Exception as e:
+        logger.error(f'Unable to compile BPF skeleton: {e}')
 

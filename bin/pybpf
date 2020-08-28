@@ -22,7 +22,7 @@
     2020-Aug-02  William Findlay  Created this.
 """
 
-from pybpf import main
+from pybpf.cli import main
 
 if __name__ == '__main__':
     main()

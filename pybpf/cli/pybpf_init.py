@@ -17,30 +17,21 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
     USA
 
-    2020-Aug-11  William Findlay  Created this.
+    2020-Aug-27  William Findlay  Created this.
 """
 
-from __future__ import annotations
 import os
-import readline
-import logging
 from urllib.parse import urlparse
 from email.utils import parseaddr as emailparse
-from typing import Optional
 
 import click
 
-# This is better than nothing. Fixes a readline issue where user can overwrite
-# the prompt. https://github.com/pallets/click/issues/665
-click.termui.visible_prompt_func = lambda x: input(" ")
-
 from pybpf.project_init import ProjectInit
 
-logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
-
-logger = logging.getLogger(__name__)
-
 class URL(click.ParamType):
+    """
+    Parse a valid URL.
+    """
     name = 'url'
 
     def is_valid(self, url):
@@ -57,13 +48,16 @@ class URL(click.ParamType):
 
 
 class Email(click.ParamType):
+    """
+    Parse a valid email.
+    """
     name = 'email'
 
     def convert(self, value, param, ctx):
         try:
-            name, email = emailparse(value)
+            _name, email = emailparse(value)
         except Exception:
-            name, email = ('', '')
+            _name, email = ('', '')
         if not email:
             self.fail(f'Invalid email {value}')
         if not '@' in email:
@@ -82,16 +76,7 @@ def continually_prompt():
         yield True
 
 
-@click.group(help='Manage pybpf projects')
-@click.help_option('-h', '--help')
-def pybpf():
-    """
-    Main pybpf program.
-    """
-    pass
-
-
-@pybpf.command(help='Create a pybpf project')
+@click.command(help='Create a pybpf project')
 @click.option(
     '--name',
     'author_name',
@@ -186,30 +171,3 @@ def init(author_name, author_email, project_git, project_dir, project_descriptio
     )
     proj_init.bootstrap_project(overwrite=overwrite)
 
-
-@pybpf.command(help='Generate vmlinux.h')
-@click.help_option('-h', '--help')
-def vmlinux():
-    project_dir = os.path.abspath('.')
-
-    proj_init = ProjectInit(project_dir=project_dir)
-    try:
-        proj_init.generate_vmlinux()
-    except Exception as e:
-        logger.error(f'Unable to generate vmlinux: {e}')
-
-
-@pybpf.command(help='Compile the BPF skeleton object')
-@click.help_option('-h', '--help')
-def compile():
-    project_dir = os.path.abspath('.')
-
-    proj_init = ProjectInit(project_dir=project_dir)
-    try:
-        proj_init.compile_bpf_skeleton()
-    except Exception as e:
-        logger.error(f'Unable to compile BPF skeleton: {e}')
-
-
-def main():
-    pybpf()
