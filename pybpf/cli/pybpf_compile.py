@@ -25,19 +25,22 @@ import logging
 
 import click
 
-from pybpf.project_init import ProjectInit
+from pybpf.bootstrap import Bootstrap
 from pybpf.cli.aliased_group import AliasedGroup
 
 logger = logging.getLogger(__name__)
 
 @click.command(help='Build the BPF skeleton object.')
+@click.argument('bpf_src', type=click.Path(exists=True, file_okay=True, dir_okay=False), default='./bpf/prog.bpf.c')
 @click.help_option('-h', '--help')
-def build():
-    project_dir = os.path.abspath('.')
-
-    proj_init = ProjectInit(project_dir=project_dir)
+def build(bpf_src):
+    """
+    Compile the BPF object for BPF_SRC.
+    If not specified, BPF_SRC defaults to ./bpf/prog.bpf.c
+    """
+    bpf_src = os.path.abspath(bpf_src)
     try:
-        proj_init.compile_bpf_skeleton()
+        Bootstrap.compile_bpf(bpf_src)
     except Exception as e:
-        logger.error(f'Unable to compile BPF skeleton: {e}')
+        logger.error(f'Unable to compile BPF program: {repr(e)}')
 

@@ -21,13 +21,14 @@
 """
 
 import os
+import sys
 import shutil
 
 import pytest
 
-from pybpf.project_init import ProjectInit
+from pybpf.bootstrap import Bootstrap
+from pybpf.skeleton import generate_skeleton
 from pybpf.utils import drop_privileges
-from pybpf.object import BPFObject
 
 TESTDIR = '/tmp/pybpf'
 
@@ -45,7 +46,13 @@ def testdir():
     yield TESTDIR
 
 @pytest.fixture
-def init(testdir):
-    init = ProjectInit(project_dir=TESTDIR, output_dir=TESTDIR)
-    init.generate_vmlinux()
-    yield init
+def skeleton(testdir):
+    import importlib.util
+    def _do_skeleton(bpf_src: str, *args, **kwargs):
+        skel_file, skel_cls = Bootstrap.bootstrap(bpf_src=bpf_src, outdir=testdir)
+        d, f = os.path.split(skel_file)
+        spec = importlib.util.spec_from_file_location(f'{skel_cls}', skel_file)
+        skel_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(skel_mod)
+        return getattr(skel_mod, skel_cls)(*args, **kwargs)
+    yield _do_skeleton

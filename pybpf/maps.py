@@ -26,13 +26,10 @@ from struct import pack, unpack
 from collections.abc import MutableMapping
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Callable, Any, Optional, Type, TYPE_CHECKING
+from typing import Callable, Any, Optional, Type, Union, TYPE_CHECKING
 
-from pybpf.lib import _RINGBUF_CB_TYPE
+from pybpf.lib import Lib, _RINGBUF_CB_TYPE
 from pybpf.utils import cerr, force_bytes
-
-if TYPE_CHECKING:
-    from pybpf.object import BPFObject
 
 # Maps map type to map class
 maptype2class = {}
@@ -81,7 +78,7 @@ class BPFMapType(IntEnum):
     # This must be the last entry
     MAP_TYPE_UNKNOWN      = auto()
 
-def create_map(bpf: BPFObject, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_int, vsize: ct.c_int, max_entries: ct.c_int) -> Optional[MapBase]:
+def create_map(skel, _map: ct.c_voidp, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_int, vsize: ct.c_int, max_entries: ct.c_int) -> Union[Type[MapBase], Type[QueueStack], Ringbuf]:
     """
     Create a BPF map object from a map description.
     """
@@ -91,21 +88,24 @@ def create_map(bpf: BPFObject, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_in
     except ValueError:
         map_type = BPFMapType.MAP_TYPE_UNKNOWN
 
+    if map_type == BPFMapType.RINGBUF:
+        return Ringbuf(skel, _map, map_fd)
+
     # Construct map based on map type
     try:
-        return maptype2class[map_type](bpf, map_fd, ksize, vsize, max_entries)
+        return maptype2class[map_type](_map, map_fd, ksize, vsize, max_entries)
     except KeyError:
         pass
 
     # Fall through
-    raise ValueError(f'No map implementation for {mtype.name}')
+    raise ValueError(f'No map implementation for {map_type.name}')
 
 class MapBase(MutableMapping):
     """
     A base class for BPF maps.
     """
-    def __init__(self, bpf: BPFObject, map_fd: int, ksize: int, vsize: int, max_entries: int):
-        self._bpf = bpf
+    def __init__(self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int):
+        self._map = _map
         self._map_fd = map_fd
         self._ksize = ksize
         self._vsize = vsize
@@ -178,9 +178,9 @@ class MapBase(MutableMapping):
         next_key = self.KeyType()
 
         if key is None:
-            ret = self._bpf._lib.bpf_map_get_next_key(self._map_fd, None, ct.byref(next_key))
+            ret = Lib.bpf_map_get_next_key(self._map_fd, None, ct.byref(next_key))
         else:
-            ret = self._bpf._lib.bpf_map_get_next_key(self._map_fd, ct.byref(key), ct.byref(next_key))
+            ret = Lib.bpf_map_get_next_key(self._map_fd, ct.byref(key), ct.byref(next_key))
 
         if ret < 0:
             raise StopIteration()
@@ -244,7 +244,7 @@ class MapBase(MutableMapping):
             value = self.ValueType(value)
         except TypeError:
             pass
-        ret = self._bpf._lib.bpf_map_update_elem(self._map_fd, ct.byref(key), ct.byref(value), flags)
+        ret = Lib.bpf_map_update_elem(self._map_fd, ct.byref(key), ct.byref(value), flags)
         if ret < 0:
             raise KeyError(f'Unable to update item: {cerr(ret)}')
 
@@ -254,7 +254,7 @@ class MapBase(MutableMapping):
             key = self.KeyType(key)
         except TypeError:
             pass
-        ret = self._bpf._lib.bpf_map_lookup_elem(self._map_fd, ct.byref(key), ct.byref(value))
+        ret = Lib.bpf_map_lookup_elem(self._map_fd, ct.byref(key), ct.byref(value))
         if ret < 0:
             raise KeyError(f'Unable to fetch item: {cerr(ret)}')
         return value
@@ -267,7 +267,7 @@ class MapBase(MutableMapping):
             key = self.KeyType(key)
         except TypeError:
             pass
-        ret = self._bpf._lib.bpf_map_delete_elem(self._map_fd, ct.byref(key))
+        ret = Lib.bpf_map_delete_elem(self._map_fd, ct.byref(key))
         if ret < 0:
             raise KeyError(f'Unable to delete item item: {cerr(ret)}')
 
@@ -286,10 +286,7 @@ class MapBase(MutableMapping):
 class PerCpuMixin(ABC):
     _vsize = None # type: int
     def __init__(self, *args, **kwargs):
-        try:
-            self._num_cpus = self._bpf._lib.libbpf_num_possible_cpus()
-        except AttributeError:
-            raise Exception('PerCpuMixin without BPF program?!')
+        self._num_cpus = Lib.num_possible_cpus()
         try:
             alignment = self._vsize % 8
         except AttributeError:
@@ -430,8 +427,8 @@ class QueueStack(ABC):
     """
     A base class for BPF stacks and queues.
     """
-    def __init__(self, bpf: BPFObject, map_fd: int, ksize: int, vsize: int, max_entries: int):
-        self._bpf = bpf
+    def __init__(self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int):
+        self._map = _map
         self._map_fd = map_fd
         self._ksize = ksize
         self._vsize = vsize
@@ -464,7 +461,7 @@ class QueueStack(ABC):
             value = self.ValueType(value)
         except TypeError:
             pass
-        ret = self._bpf._lib.bpf_map_update_elem(self._map_fd, None, ct.byref(value), flags)
+        ret = Lib.bpf_map_update_elem(self._map_fd, None, ct.byref(value), flags)
         if ret < 0:
             raise KeyError(f'Unable to push value: {cerr(ret)}')
 
@@ -473,7 +470,7 @@ class QueueStack(ABC):
         Pop an element from the map.
         """
         value = self.ValueType()
-        ret = self._bpf._lib.bpf_map_lookup_and_delete_elem(self._map_fd, None, ct.byref(value))
+        ret = Lib.bpf_map_lookup_and_delete_elem(self._map_fd, None, ct.byref(value))
         if ret < 0:
             raise KeyError(f'Unable to pop value: {cerr(ret)}')
         return value
@@ -483,7 +480,7 @@ class QueueStack(ABC):
         Peek an element from the map.
         """
         value = self.ValueType()
-        ret = self._bpf._lib.bpf_map_lookup_elem(self._map_fd, None, ct.byref(value))
+        ret = Lib.bpf_map_lookup_elem(self._map_fd, None, ct.byref(value))
         if ret < 0:
             raise KeyError(f'Unable to peek value: {cerr(ret)}')
         return value
@@ -504,17 +501,16 @@ class Stack(QueueStack):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-@register_map(BPFMapType.RINGBUF)
 class Ringbuf:
     """
     A ringbuf map for passing per-event data to userspace. This class should not
     be instantiated directly. Instead, it is created automatically by the BPFObject.
     """
-    def __init__(self, bpf: BPFObject, map_fd: int, *args, **kwargs):
-        self.bpf = bpf
+    def __init__(self, skel, _map: ct.c_void_p, map_fd: int):
+        self._skel = skel
+        self._map = _map
         self.map_fd = map_fd
 
-        # Look up ringbuf fd by its name
         if self.map_fd < 0:
             raise Exception(f'Bad file descriptor for ringbuf')
 
@@ -538,9 +534,6 @@ class Ringbuf:
         Optionally, the function may return a non-zero integer to indicate that
         polling should be stopped.
         """
-        if not self.bpf.obj:
-            raise Exception(f'Unable to register ringbuf callback: No BPF object loaded')
-
         # Decorator to register the ringbuf callback
         def inner(func):
             def wrapper(ctx, data, size):
@@ -568,13 +561,13 @@ class Ringbuf:
         # Cast func as _RINGBUF_CB_TYPE
         func = _RINGBUF_CB_TYPE(func)
         # Handle case where we don't have a manager yet
-        if not self.bpf._ringbuf_mgr:
-            self.bpf._ringbuf_mgr = self.bpf._lib.ring_buffer__new(map_fd, func, ctx, None)
-            if not self.bpf._ringbuf_mgr:
+        if not self._skel._ringbuf_mgr:
+            self._skel._ringbuf_mgr = Lib.ring_buffer_new(map_fd, func, ctx, None)
+            if not self._skel._ringbuf_mgr:
                 raise Exception(f'Failed to create new ring buffer manager: {cerr()}')
         # Handle case where we already have a manager
         else:
-            ret = self.bpf._lib.ring_buffer__add(self.bpf._ringbuf_mgr, map_fd, func, ctx)
+            ret = Lib.ring_buffer_add(self._skel._ringbuf_mgr, map_fd, func, ctx)
             if ret != 0:
                 raise Exception(f'Failed to add ringbuf to ring buffer manager: {cerr(ret)}')
         # Keep a refcnt so that our function doesn't get cleaned up

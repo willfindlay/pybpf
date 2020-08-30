@@ -26,11 +26,8 @@ from enum import IntEnum, auto
 from abc import ABC
 from typing import Callable, Any, Optional, Type, TYPE_CHECKING
 
-from pybpf.lib import _RINGBUF_CB_TYPE
-from pybpf.utils import cerr, force_bytes
-
-if TYPE_CHECKING:
-    from pybpf.object import BPFObject
+from pybpf.lib import Lib, _RINGBUF_CB_TYPE
+from pybpf.utils import cerr, force_bytes, get_encoded_kernel_version
 
 # Maps prog type to prog class
 progtype2class = {}
@@ -82,7 +79,7 @@ class BPFProgType(IntEnum):
     # This must be the last entry
     PROG_TYPE_UNKNOWN       = auto()
 
-def create_prog(bpf: BPFObject, prog_name: str, prog_fd: ct.c_int, prog_type: ct.c_int) -> Optional[ProgBase]:
+def create_prog(prog: ct.c_void_p, prog_name: str, prog_type: ct.c_int, prog_fd: ct.c_int) -> Optional[ProgBase]:
     """
     Create a BPF prog object from a prog description.
     """
@@ -94,7 +91,7 @@ def create_prog(bpf: BPFObject, prog_name: str, prog_fd: ct.c_int, prog_type: ct
 
     # Construct prog based on prog type
     try:
-        return progtype2class[prog_type](bpf, prog_name, prog_fd)
+        return progtype2class[prog_type](prog, prog_name, prog_fd)
     except KeyError:
         pass
 
@@ -105,13 +102,26 @@ class ProgBase(ABC):
     """
     A base class for BPF programs.
     """
-    def __init__(self, bpf: BPFObject, name: str, prog_fd: int):
-        self._bpf = bpf
+    def __init__(self, prog: ct.c_void_p, name: str, prog_fd: int):
+        if not prog:
+            raise Exception(f'Null program pointer for {name}')
+        self._prog = prog
         self._name = name
         self._prog_fd = prog_fd
+        self._link = None # type: ct.c_void_p
 
     def __eq__(self, other):
         return id(self) == id(other)
+
+    def attach(self):
+        """
+        Attach the BPF program.
+        """
+        if self._link:
+            return
+        self._link = Lib.bpf_program_attach(self._prog)
+        if not self._link:
+            raise Exception(f'Failed to attach BPF program {self._name}: {cerr()}')
 
     def invoke(self, data: ct.Structure = None):
         """
@@ -130,7 +140,7 @@ class ProgBase(ABC):
         # should be okay to pass to the unsigned retval pointer
         bpf_ret = ct.c_uint32()
 
-        retval = self._bpf._lib.bpf_prog_test_run(self._prog_fd, ct.c_int(1), data_p, data_size, None, ct.c_uint32(0), ct.byref(bpf_ret), None)
+        retval = Lib.bpf_prog_test_run(self._prog_fd, ct.c_int(1), data_p, data_size, None, ct.c_uint32(0), ct.byref(bpf_ret), None)
         if retval < 0:
             raise Exception(f'Failed to invoke BPF program {self._name}: {cerr(retval)}')
 

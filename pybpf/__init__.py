@@ -20,10 +20,15 @@
     2020-Aug-02  William Findlay  Created this.
 """
 
-from .object import BPFObject
-from .project_init import ProjectInit
+from .maps import create_map
+from .programs import create_prog
+from .lib import Lib
+from .bootstrap import Bootstrap
+from . import skeleton
+from . import programs
+from . import maps
 
-__all__ = ['BPFObject', 'ProjectInit']
+__all__ = ['Bootstrap']
 
 try:
     from .syscall import syscall_name, syscall_num

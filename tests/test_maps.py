@@ -28,14 +28,12 @@ from multiprocessing import cpu_count
 
 import pytest
 
-from pybpf.project_init import ProjectInit
-from pybpf.object import BPFObject
 from pybpf.maps import create_map
 from pybpf.utils import project_path, which
 
 BPF_SRC = project_path('tests/bpf_src')
 
-def test_ringbuf(init: ProjectInit):
+def test_ringbuf(skeleton):
     """
     Test that ringbuf maps can pass data to userspace from BPF programs.
     """
@@ -44,24 +42,23 @@ def test_ringbuf(init: ProjectInit):
     except FileNotFoundError:
         pytest.skip('sleep not found on system')
 
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c'))
 
     res = 0
     res2 = 0
 
-    @obj.ringbuf_callback('ringbuf', ct.c_int)
+    @skel.maps.ringbuf.callback(ct.c_int)
     def _callback(ctx, data, size):
         nonlocal res
         res = data.value
 
-    @obj.ringbuf_callback('ringbuf2', ct.c_int)
+    @skel.maps.ringbuf2.callback(ct.c_int)
     def _callback(ctx, data, size):
         nonlocal res2
         res2 = data.value
 
     subprocess.check_call('sleep 0.1'.split())
-    obj.ringbuf_consume()
+    skel.ringbuf_consume()
 
     assert res == 5
     assert res2 == 10
@@ -70,101 +67,101 @@ def test_ringbuf(init: ProjectInit):
     res2 = 0
 
     subprocess.check_call('sleep 0.1'.split())
-    obj.ringbuf_poll(10)
+    skel.ringbuf_poll(10)
 
     assert res == 5
     assert res2 == 10
 
-def test_bad_ringbuf(init: ProjectInit):
+def test_bad_ringbuf(skeleton):
     """
     Test that attempting to register a callback for a non-existent ringbuf
     raises a KeyError.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c'))
 
     with pytest.raises(KeyError):
-        @obj.ringbuf_callback('ringbuf3', ct.c_int)
+        @skel.maps.ringbuf3.callback(ct.c_int)
         def _callback(ctx, data, size):
             print('unreachable!')
 
-def test_maps_smoke(init: ProjectInit):
+def test_maps_smoke(skeleton):
     """
     Make sure maps load properly.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
     EXPECTED_MAP_COUNT = 9
 
-    if len(obj._maps) > EXPECTED_MAP_COUNT:
-        pytest.xfail(f'EXPECTED_MAP_COUNT should be updated to {len(obj._maps)}')
+    if len(skel.maps) > EXPECTED_MAP_COUNT:
+        pytest.xfail(f'EXPECTED_MAP_COUNT should be updated to {len(skel.maps)}')
 
-    assert len(obj._maps) == EXPECTED_MAP_COUNT
+    assert len(skel.maps) == EXPECTED_MAP_COUNT
 
-def test_bad_map(init: ProjectInit):
+def test_bad_map(skeleton):
     """
     Test that accessing a non-existent map raises a KeyError.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
     with pytest.raises(KeyError):
-        obj.map('foo')
+        skel.maps.foo
 
-def test_hash(init: ProjectInit):
+    with pytest.raises(KeyError):
+        skel.maps['foo']
+
+def test_hash(skeleton):
     """
     Test BPF_HASH.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
     # Register key and value type
-    obj.map('hash').register_key_type(ct.c_int)
-    obj.map('hash').register_value_type(ct.c_int)
+    skel.maps.hash.register_key_type(ct.c_int)
+    skel.maps.hash.register_value_type(ct.c_int)
 
-    assert len(obj.map('hash')) == 0
+    _hash = skel.maps.hash
+
+    assert len(_hash) == 0
 
     # Try to query the empty map
-    for i in range(obj.map('hash').capacity()):
+    for i in range(_hash.capacity()):
         with pytest.raises(KeyError):
-            obj.map('hash')[i]
+            _hash[i]
 
     # Fill the map
-    for i in range(obj.map('hash').capacity()):
-        obj.map('hash')[i] = i
-    assert len(obj.map('hash')) == obj.map('hash').capacity()
+    for i in range(_hash.capacity()):
+        _hash[i] = i
+    assert len(_hash) == _hash.capacity()
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj.map('hash')[obj.map('hash').capacity()] = 666
+        _hash[_hash.capacity()] = 666
 
     # Query the full map
-    for i in range(obj.map('hash').capacity()):
-        assert obj.map('hash')[i].value == i
+    for i in range(_hash.capacity()):
+        assert _hash[i].value == i
 
     # Update an existing value
-    obj.map('hash')[4] = 666
-    assert obj.map('hash')[4].value == 666
+    _hash[4] = 666
+    assert _hash[4].value == 666
 
     # Clear the map
-    for i in range(obj.map('hash').capacity()):
-        del obj.map('hash')[i]
-    assert len(obj.map('hash')) == 0
+    for i in range(_hash.capacity()):
+        del _hash[i]
+    assert len(_hash) == 0
 
     # Try to query the empty map
-    for i in range(obj.map('hash').capacity()):
+    for i in range(_hash.capacity()):
         with pytest.raises(KeyError):
-            obj.map('hash')[i]
+            _hash[i]
 
-def test_percpu_hash(init: ProjectInit):
+def test_percpu_hash(skeleton):
     """
     Test BPF_PERCPU_HASH.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
-    percpu_hash = obj.map('percpu_hash')
+    percpu_hash = skel.maps.percpu_hash
 
     percpu_hash.register_key_type(ct.c_int)
     percpu_hash.register_value_type(ct.c_int)
@@ -188,45 +185,45 @@ def test_percpu_hash(init: ProjectInit):
 
     assert len(percpu_hash) == 0
 
-def test_lru_hash(init: ProjectInit):
+def test_lru_hash(skeleton):
     """
     Test BPF_LRU_HASH.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
     # Register key and value type
-    obj.map('lru_hash').register_key_type(ct.c_int)
-    obj.map('lru_hash').register_value_type(ct.c_int)
+    skel.maps.lru_hash.register_key_type(ct.c_int)
+    skel.maps.lru_hash.register_value_type(ct.c_int)
 
-    assert len(obj.map('lru_hash')) == 0
+    lru_hash = skel.maps.lru_hash
+
+    assert len(lru_hash) == 0
 
     # Try to query the empty map
-    for i in range(obj.map('lru_hash').capacity()):
+    for i in range(lru_hash.capacity()):
         with pytest.raises(KeyError):
-            obj.map('lru_hash')[i]
+            lru_hash[i]
 
     # Overfill the map
-    for i in range(obj.map('lru_hash').capacity() + 30):
-        obj.map('lru_hash')[i] = i
+    for i in range(lru_hash.capacity() + 30):
+        lru_hash[i] = i
 
-    assert len(obj.map('lru_hash')) <= obj.map('lru_hash').capacity()
+    assert len(lru_hash) <= lru_hash.capacity()
 
-    for i, v in obj.map('lru_hash').items():
+    for i, v in lru_hash.items():
         assert i.value == v.value
 
-    obj.map('lru_hash').clear()
+    lru_hash.clear()
 
-    assert len(obj.map('lru_hash')) == 0
+    assert len(lru_hash) == 0
 
-def test_lru_percpu_hash(init: ProjectInit):
+def test_lru_percpu_hash(skeleton):
     """
     Test BPF_LRU_PERCPU_HASH.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
-    lru_percpu_hash = obj.map('lru_percpu_hash')
+    lru_percpu_hash = skel.maps.lru_percpu_hash
 
     lru_percpu_hash.register_key_type(ct.c_int)
     lru_percpu_hash.register_value_type(ct.c_int)
@@ -251,65 +248,65 @@ def test_lru_percpu_hash(init: ProjectInit):
 
     assert len(lru_percpu_hash) == 0
 
-def test_array(init: ProjectInit):
+def test_array(skeleton):
     """
     Test BPF_ARRAY.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
+
+    array = skel.maps.array
 
     # Register value type
-    obj.map('array').register_value_type(ct.c_int)
+    array.register_value_type(ct.c_int)
 
     # It should be impossible to change the key type
     with pytest.raises(NotImplementedError):
-        obj.map('array').register_key_type(ct.c_int)
+        array.register_key_type(ct.c_int)
 
-    assert len(obj.map('array')) == obj.map('array').capacity()
+    assert len(array) == array.capacity()
 
     # Try to query the empty map
-    for i in range(obj.map('array').capacity()):
-        obj.map('array')[i] == 0
+    for i in range(array.capacity()):
+        array[i] == 0
 
     # Fill the map
-    for i in range(obj.map('array').capacity()):
-        obj.map('array')[i] = i
-    assert len(obj.map('array')) == obj.map('array').capacity()
+    for i in range(array.capacity()):
+        array[i] = i
+    assert len(array) == array.capacity()
 
     # Try to add to full map
     with pytest.raises(KeyError):
-        obj.map('array')[obj.map('array').capacity()] = 666
+        array[array.capacity()] = 666
 
     # Query the full map
-    for i in range(obj.map('array').capacity()):
-        assert obj.map('array')[i].value == i
+    for i in range(array.capacity()):
+        assert array[i].value == i
 
     # Update an existing value
-    obj.map('array')[4] = 666
-    assert obj.map('array')[4].value == 666
+    array[4] = 666
+    assert array[4].value == 666
 
     # Clear the map
-    for i in range(obj.map('array').capacity()):
-        del obj.map('array')[i]
-    assert len(obj.map('array')) == obj.map('array').capacity()
+    for i in range(array.capacity()):
+        del array[i]
+    assert len(array) == array.capacity()
 
     # Try to query the empty map
-    for i in range(obj.map('array').capacity()):
-        obj.map('array')[i] == 0
+    for i in range(array.capacity()):
+        array[i] == 0
 
-def test_percpu_array(init: ProjectInit):
+def test_percpu_array(skeleton):
     """
     Test BPF_PERCPU_ARRAY.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
-    percpu_array = obj.map('percpu_array')
+    percpu_array = skel.maps.percpu_array
 
     percpu_array.register_value_type(ct.c_int)
     # It should be impossible to change the key type
     with pytest.raises(NotImplementedError):
-        obj.map('array').register_key_type(ct.c_int)
+        percpu_array.register_key_type(ct.c_int)
 
     assert len(percpu_array) == percpu_array.capacity()
     for i in range(percpu_array.capacity()):
@@ -336,104 +333,103 @@ def test_percpu_array(init: ProjectInit):
         for v in percpu_array[i]:
             assert v == 0
 
-def test_prog_array(init: ProjectInit):
+def test_prog_array(skeleton):
     """
     Test BPF_PROG_ARRAY.
     """
     pytest.skip('TODO')
 
-def test_perf_event_array(init: ProjectInit):
+def test_perf_event_array(skeleton):
     """
     Test BPF_PERF_EVENT_ARRAY.
     """
     pytest.skip('TODO')
 
-def test_stack_trace(init: ProjectInit):
+def test_stack_trace(skeleton):
     """
     Test BPF_STACK_TRACE.
     """
     pytest.skip('TODO')
 
-def test_cgroup_array(init: ProjectInit):
+def test_cgroup_array(skeleton):
     """
     Test BPF_CGROUP_ARRAY.
     """
     pytest.skip('TODO')
 
-def test_lpm_trie(init: ProjectInit):
+def test_lpm_trie(skeleton):
     """
     Test BPF_LPM_TRIE.
     """
     pytest.skip('TODO')
 
-def test_array_of_maps(init: ProjectInit):
+def test_array_of_maps(skeleton):
     """
     Test BPF_ARRAY_OF_MAPS.
     """
     pytest.skip('TODO')
 
-def test_hash_of_maps(init: ProjectInit):
+def test_hash_of_maps(skeleton):
     """
     Test BPF_HASH_OF_MAPS.
     """
     pytest.skip('TODO')
 
-def test_devmap(init: ProjectInit):
+def test_devmap(skeleton):
     """
     Test BPF_DEVMAP.
     """
     pytest.skip('TODO')
 
-def test_sockmap(init: ProjectInit):
+def test_sockmap(skeleton):
     """
     Test BPF_SOCKMAP.
     """
     pytest.skip('TODO')
 
-def test_cpumap(init: ProjectInit):
+def test_cpumap(skeleton):
     """
     Test BPF_CPUMAP.
     """
     pytest.skip('TODO')
 
-def test_xskmap(init: ProjectInit):
+def test_xskmap(skeleton):
     """
     Test BPF_XSKMAP.
     """
     pytest.skip('TODO')
 
-def test_sockhash(init: ProjectInit):
+def test_sockhash(skeleton):
     """
     Test BPF_SOCKHASH.
     """
     pytest.skip('TODO')
 
-def test_cgroup_storage(init: ProjectInit):
+def test_cgroup_storage(skeleton):
     """
     Test BPF_CGROUP_STORAGE.
     """
     pytest.skip('TODO')
 
-def test_reuseport_sockarray(init: ProjectInit):
+def test_reuseport_sockarray(skeleton):
     """
     Test BPF_REUSEPORT_SOCKARRAY.
     """
     pytest.skip('TODO')
 
-def test_percpu_cgroup_storage(init: ProjectInit):
+def test_percpu_cgroup_storage(skeleton):
     """
     Test BPF_PERCPU_CGROUP_STORAGE.
     """
     pytest.skip('TODO')
 
-def test_queue(init: ProjectInit):
+def test_queue(skeleton):
     """
     Test BPF_QUEUE.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
-    queue = obj.map('queue')
+    queue = skel.maps.queue
 
     queue.register_value_type(ct.c_int)
 
@@ -453,14 +449,13 @@ def test_queue(init: ProjectInit):
     with pytest.raises(KeyError):
         queue.pop()
 
-def test_stack(init: ProjectInit):
+def test_stack(skeleton):
     """
     Test BPF_STACK.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(os.path.join(BPF_SRC, 'maps.bpf.c'))
 
-    stack = obj.map('stack')
+    stack = skel.maps.stack
 
     stack.register_value_type(ct.c_int)
 
@@ -480,19 +475,19 @@ def test_stack(init: ProjectInit):
     with pytest.raises(KeyError):
         stack.pop()
 
-def test_sk_storage(init: ProjectInit):
+def test_sk_storage(skeleton):
     """
     Test BPF_SK_STORAGE.
     """
     pytest.skip('TODO')
 
-def test_devmap_hash(init: ProjectInit):
+def test_devmap_hash(skeleton):
     """
     Test BPF_DEVMAP_HASH.
     """
     pytest.skip('TODO')
 
-def test_struct_ops(init: ProjectInit):
+def test_struct_ops(skeleton):
     """
     Test BPF_STRUCT_OPS.
     """

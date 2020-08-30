@@ -27,46 +27,42 @@ import ctypes as ct
 
 import pytest
 
-from pybpf.project_init import ProjectInit
-from pybpf.object import BPFObject
 from pybpf.maps import create_map
 from pybpf.utils import project_path, which
 
-BPF_SRC = project_path('tests/bpf_src')
+BPF_SRC = project_path('tests/bpf_src/prog.bpf.c')
 
-def test_progs_smoke(init: ProjectInit):
+def test_progs_smoke(skeleton):
     """
     Make sure progs load properly.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'prog.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(BPF_SRC)
 
     EXPECTED_PROG_COUNT = 4
 
-    if len(obj._progs) > EXPECTED_PROG_COUNT:
-        pytest.xfail(f'EXPECTED_PROG_COUNT should be updated to {len(obj._progs)}')
+    if len(skel.progs) > EXPECTED_PROG_COUNT:
+        pytest.xfail(f'EXPECTED_PROG_COUNT should be updated to {len(skel.progs)}')
 
-    assert len(obj._progs) == EXPECTED_PROG_COUNT
+    assert len(skel.progs) == EXPECTED_PROG_COUNT
 
-def test_bad_prog(init: ProjectInit):
+def test_bad_prog(skeleton):
     """
     Test that accessing a non-existent prog raises a KeyError.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'prog.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(BPF_SRC)
 
     with pytest.raises(KeyError):
-        obj.prog('foo')
+        skel.progs.foo
 
-def test_prog_invoke(init: ProjectInit):
+    with pytest.raises(KeyError):
+        skel.progs['foo']
+
+def test_prog_invoke(skeleton):
     """
     Test .invoke() method on supported program types.
     """
-    so = init.compile_bpf_skeleton(os.path.join(BPF_SRC, 'prog.bpf.c'))
-    obj = BPFObject(so, True, True)
+    skel = skeleton(BPF_SRC)
 
-    fexit_modify_return_test = obj.prog('fexit_modify_return_test')
-    assert fexit_modify_return_test.invoke() == 0
+    assert skel.progs.fexit_modify_return_test.invoke() == 0
 
-    fentry_modify_return_test = obj.prog('fentry_modify_return_test')
-    assert fentry_modify_return_test.invoke() == 0
+    assert skel.progs.fentry_modify_return_test.invoke() == 0

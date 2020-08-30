@@ -28,6 +28,8 @@ from typing import get_type_hints, Callable, List, Tuple, Generator
 
 from pybpf.utils import which, arch, kversion, strip_end
 
+_LIBBPF = ct.CDLL('libbpf.so', use_errno=True)
+
 _RINGBUF_CB_TYPE = ct.CFUNCTYPE(ct.c_int, ct.c_void_p, ct.c_void_p, ct.c_int)
 
 def skeleton_fn(skeleton: ct.CDLL, name: str) -> Callable:
@@ -51,187 +53,201 @@ def skeleton_fn(skeleton: ct.CDLL, name: str) -> Callable:
         return wrapper
     return inner
 
-def create_skeleton_lib(skeleton: ct.CDLL) -> 'Lib':
+def libbpf_fn(name: str) -> Callable:
     """
-    Create a skeleton library interface.
-    Keep this in sync with libbpf and libpybpf.c.in.
+    A decorator that wraps a libbpf function of the same name.
+    """
+    def inner(func):
+        th = get_type_hints(func)
+        argtypes = [v for k, v in th.items() if k != 'return']
+        try:
+            restype = th['return']
+            if restype == type(None):
+                restype = None
+        except KeyError:
+            restype = None
+        @staticmethod
+        def wrapper(*args, **kwargs):
+            return getattr(_LIBBPF, name)(*args, **kwargs)
+        getattr(_LIBBPF, name).argtypes = argtypes
+        getattr(_LIBBPF, name).restype = restype
+        return wrapper
+    return inner
+
+class Lib:
+    """
+    Python bindings for libbpf.
     """
     # pylint: disable=no-self-argument,no-method-argument
-    class Lib:
-        # ====================================================================
-        # Skeleton Functions
-        # ====================================================================
 
-        @skeleton_fn(skeleton, 'pybpf_open')
-        def pybpf_open() -> ct.c_void_p:
-            pass
+    # ====================================================================
+    # Bookkeeping
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'pybpf_load')
-        def pybpf_load(bpf: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_object__open')
+    def bpf_object_open(path: ct.c_char_p) -> ct.c_void_p:
+        pass
 
-        @skeleton_fn(skeleton, 'pybpf_attach')
-        def pybpf_attach(bpf: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_object__load')
+    def bpf_object_load(obj: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'pybpf_destroy')
-        def pybpf_destroy(bpf: ct.c_void_p) -> None:
-            pass
+    @libbpf_fn('bpf_object__close')
+    def bpf_object_close(obj: ct.c_void_p) -> None:
+        pass
 
-        @skeleton_fn(skeleton, 'get_bpf_object')
-        def get_bpf_object(bpf: ct.c_void_p) -> ct.c_void_p:
-            pass
+    # ====================================================================
+    # Map Functions
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'bump_memlock_rlimit')
-        def bump_memlock_rlimit() -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_object__find_map_fd_by_name')
+    def find_map_fd_by_name(obj: ct.c_void_p, name: ct.c_char_p) -> ct.c_int:
+        pass
 
-        # ====================================================================
-        # Map Functions
-        # ====================================================================
+    @libbpf_fn('bpf_map__fd')
+    def bpf_map_fd(_map: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_object__find_map_fd_by_name')
-        def bpf_object__find_map_fd_by_name(obj: ct.c_void_p, name: ct.c_char_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map__type')
+    def bpf_map_type(_map: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__fd')
-        def bpf_map__fd(_map: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map__key_size')
+    def bpf_map_key_size(_map: ct.c_void_p) -> ct.c_uint32:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__type')
-        def bpf_map__type(_map: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map__value_size')
+    def bpf_map_value_size(_map: ct.c_void_p) -> ct.c_uint32:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__key_size')
-        def bpf_map__key_size(_map: ct.c_void_p) -> ct.c_uint32:
-            pass
+    @libbpf_fn('bpf_map__name')
+    def bpf_map_name(_map: ct.c_void_p) -> ct.c_char_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__value_size')
-        def bpf_map__value_size(_map: ct.c_void_p) -> ct.c_uint32:
-            pass
+    @libbpf_fn('bpf_map__max_entries')
+    def bpf_map_max_entries(_map: ct.c_void_p) -> ct.c_uint32:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__name')
-        def bpf_map__name(_map: ct.c_void_p) -> ct.c_char_p:
-            pass
+    @libbpf_fn('bpf_map__next')
+    def bpf_map_next(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__max_entries')
-        def bpf_map__max_entries(_map: ct.c_void_p) -> ct.c_uint32:
-            pass
+    @libbpf_fn('bpf_map__prev')
+    def bpf_map_prev(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map__next')
-        def _bpf_map__next(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
-            pass
+    @classmethod
+    def obj_maps(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
+        if not obj:
+            raise StopIteration('Null BPF object.')
+        _map = cls.bpf_map_next(None, obj)
+        while _map:
+            yield _map
+            _map = cls.bpf_map_next(_map, obj)
 
-        @skeleton_fn(skeleton, 'bpf_map__prev')
-        def _bpf_map__prev(_map: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
-            pass
+    @libbpf_fn('bpf_map_lookup_elem')
+    def bpf_map_lookup_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @classmethod
-        def obj_maps(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
-            if not obj:
-                raise StopIteration('Null BPF object.')
-            _map = cls._bpf_map__next(None, obj)
-            while _map:
-                yield _map
-                _map = cls._bpf_map__next(_map, obj)
+    @libbpf_fn('bpf_map_update_elem')
+    def bpf_map_update_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p, flags :ct.c_int) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map_lookup_elem')
-        def bpf_map_lookup_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map_delete_elem')
+    def bpf_map_delete_elem(map_fd: ct.c_int, key: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map_update_elem')
-        def bpf_map_update_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p, flags :ct.c_int) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map_lookup_and_delete_elem')
+    def bpf_map_lookup_and_delete_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map_delete_elem')
-        def bpf_map_delete_elem(map_fd: ct.c_int, key: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_map_get_next_key')
+    def bpf_map_get_next_key(map_fd: ct.c_int, key: ct.c_void_p, next_key: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_map_lookup_and_delete_elem')
-        def bpf_map_lookup_and_delete_elem(map_fd: ct.c_int, key: ct.c_void_p, value: ct.c_void_p) -> ct.c_int:
-            pass
+    # ====================================================================
+    # Libbpf Ringbuf
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'bpf_map_get_next_key')
-        def bpf_map_get_next_key(map_fd: ct.c_int, key: ct.c_void_p, next_key: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('ring_buffer__new')
+    def ring_buffer_new(map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p, opts: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        # ====================================================================
-        # Libbpf Ringbuf
-        # ====================================================================
+    @libbpf_fn('ring_buffer__free')
+    def ring_buffer_free(ringbuf: ct.c_void_p) -> None:
+        pass
 
-        @skeleton_fn(skeleton, 'ring_buffer__new')
-        def ring_buffer__new(map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p, opts: ct.c_void_p) -> ct.c_void_p:
-            pass
+    @libbpf_fn('ring_buffer__add')
+    def ring_buffer_add(ringbuf: ct.c_void_p, map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'ring_buffer__free')
-        def ring_buffer__free(ringbuf: ct.c_void_p) -> None:
-            pass
+    @libbpf_fn('ring_buffer__poll')
+    def ring_buffer_poll(ringbuf: ct.c_void_p, timeout_ms: ct.c_int) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'ring_buffer__add')
-        def ring_buffer__add(ringbuf: ct.c_void_p, map_fd: ct.c_int, sample_cb: _RINGBUF_CB_TYPE, ctx: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('ring_buffer__consume')
+    def ring_buffer_consume(ringbuf: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'ring_buffer__poll')
-        def ring_buffer__poll(ringbuf: ct.c_void_p, timeout_ms: ct.c_int) -> ct.c_int:
-            pass
+    # ====================================================================
+    # Program Functions
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'ring_buffer__consume')
-        def ring_buffer__consume(ringbuf: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_program__fd')
+    def bpf_program_fd(prog: ct.c_void_p) -> ct.c_int:
+        pass
 
-        # ====================================================================
-        # Program Functions
-        # ====================================================================
+    @libbpf_fn('bpf_program__get_type')
+    def bpf_program_type(prog: ct.c_void_p) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_program__fd')
-        def bpf_program__fd(prog: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_program__name')
+    def bpf_program_name(prog: ct.c_void_p) -> ct.c_char_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_program__get_type')
-        def bpf_program__get_type(prog: ct.c_void_p) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_program__load')
+    def bpf_program_load(prog: ct.c_void_p, license: ct.c_char_p, kernel_version: ct.c_uint32) -> ct.c_int:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_program__name')
-        def bpf_program__name(prog: ct.c_void_p) -> ct.c_char_p:
-            pass
+    @libbpf_fn('bpf_program__attach')
+    def bpf_program_attach(prog: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_program__next')
-        def _bpf_program__next(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
-            pass
+    @libbpf_fn('bpf_program__next')
+    def bpf_program_next(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        @skeleton_fn(skeleton, 'bpf_program__prev')
-        def _bpf_program__prev(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
-            pass
+    @libbpf_fn('bpf_program__prev')
+    def bpf_program_prev(prog: ct.c_void_p, obj: ct.c_void_p) -> ct.c_void_p:
+        pass
 
-        @classmethod
-        def obj_programs(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
-            if not obj:
-                raise StopIteration('Null BPF object.')
-            prog = cls._bpf_program__next(None, obj)
-            while prog:
-                yield prog
-                prog = cls._bpf_program__next(prog, obj)
+    @classmethod
+    def obj_programs(cls, obj: ct.c_void_p) -> Generator[ct.c_void_p, None, None]:
+        if not obj:
+            raise StopIteration('Null BPF object.')
+        prog = cls.bpf_program_next(None, obj)
+        while prog:
+            yield prog
+            prog = cls.bpf_program_next(prog, obj)
 
-        @skeleton_fn(skeleton, 'bpf_prog_test_run')
-        def bpf_prog_test_run(prog_fd: ct.c_int, repeat: ct.c_int, data: ct.c_void_p, data_size: ct.c_uint32, data_out: ct.c_void_p, data_out_size: ct.POINTER(ct.c_uint32), retval: ct.POINTER(ct.c_uint32), duration: ct.POINTER(ct.c_uint32)) -> ct.c_int:
-            pass
+    @libbpf_fn('bpf_prog_test_run')
+    def bpf_prog_test_run(prog_fd: ct.c_int, repeat: ct.c_int, data: ct.c_void_p, data_size: ct.c_uint32, data_out: ct.c_void_p, data_out_size: ct.POINTER(ct.c_uint32), retval: ct.POINTER(ct.c_uint32), duration: ct.POINTER(ct.c_uint32)) -> ct.c_int:
+        pass
 
-        # ====================================================================
-        # Uprobe Attachment
-        # ====================================================================
+    # ====================================================================
+    # Uprobe Attachment
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'bpf_program__attach_uprobe')
-        def bpf_program__attach_uprobe(prog: ct.c_void_p, retprobe: ct.c_bool, pid: ct.c_int, binary_path: ct.c_char_p, func_offset: ct.c_size_t) -> ct.c_void_p:
-            pass
+    @libbpf_fn('bpf_program__attach_uprobe')
+    def attach_uprobe(prog: ct.c_void_p, retprobe: ct.c_bool, pid: ct.c_int, binary_path: ct.c_char_p, func_offset: ct.c_size_t) -> ct.c_void_p:
+        pass
 
-        # ====================================================================
-        # Book Keeping
-        # ====================================================================
+    # ====================================================================
+    # Book Keeping
+    # ====================================================================
 
-        @skeleton_fn(skeleton, 'libbpf_num_possible_cpus')
-        def libbpf_num_possible_cpus() -> ct.c_int:
-            pass
+    @libbpf_fn('libbpf_num_possible_cpus')
+    def num_possible_cpus() -> ct.c_int:
+        pass
 
-    # pylint: enable=no-self-argument,no-method-argument
-
-    return Lib
+# pylint: enable=no-self-argument,no-method-argument

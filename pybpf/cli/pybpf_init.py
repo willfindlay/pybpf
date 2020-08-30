@@ -26,7 +26,7 @@ from email.utils import parseaddr as emailparse
 
 import click
 
-from pybpf.project_init import ProjectInit
+from pybpf.bootstrap import Bootstrap
 
 class URL(click.ParamType):
     """
@@ -161,13 +161,13 @@ def init(author_name, author_email, project_git, project_dir, project_descriptio
                 'Project description (empty skips)', type=str, default=''
             )
 
-    proj_init = ProjectInit(
-        author_name,
-        author_email,
-        project_name,
-        project_dir,
-        project_git,
-        project_description,
-    )
-    proj_init.bootstrap_project(overwrite=overwrite)
+    Bootstrap.ProjectBuilder(
+            author_name=author_name,
+            author_email=author_email,
+            project_name=project_name,
+            project_dir=project_dir,
+            project_git=project_git,
+            project_description=project_description,
+            overwrite_existing=overwrite
+            ).build()
 

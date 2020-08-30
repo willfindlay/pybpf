@@ -41,12 +41,14 @@ logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @click.group(help='Manage pybpf projects', cls=AliasedGroup)
+@click.option('--debug', flag_value=True, default=False, hidden=True)
 @click.help_option('-h', '--help')
-def pybpf():
+def pybpf(debug=False):
     """
     Main pybpf program.
     """
-    pass
+    if debug:
+        logging.getLogger().setLevel(logging.DEBUG)
 
 
 def main():

@@ -25,29 +25,54 @@ import logging
 
 import click
 
-from pybpf.project_init import ProjectInit
+from pybpf.bootstrap import Bootstrap
+from pybpf.skeleton import generate_skeleton
 from pybpf.cli.aliased_group import AliasedGroup
 
 logger = logging.getLogger(__name__)
 
-@click.group(help='Generate files for your pybpf project.', cls=AliasedGroup)
+
+@click.group(cls=AliasedGroup)
 @click.help_option('-h', '--help')
 def generate():
+    """
+    Generate files for your pybpf project.
+    """
     pass
 
-@generate.command(help='Generate vmlinux.h')
-@click.help_option('-h', '--help')
-def vmlinux():
-    project_dir = os.path.abspath('.')
 
-    proj_init = ProjectInit(project_dir=project_dir)
+@generate.command()
+@click.argument('bpf_dir', type=click.Path(exists=True, file_okay=False, dir_okay=True), default='./bpf')
+@click.help_option('-h', '--help')
+def vmlinux(bpf_dir):
+    """
+    Generate the vmlinux.h header file and place it in BPF_DIR.
+    If not specified, BPF_DIR defaults to ./bpf
+    """
+    bpf_dir = os.path.abspath(bpf_dir)
     try:
-        proj_init.generate_vmlinux()
+        Bootstrap.generate_vmlinux(bpfdir=bpf_dir)
     except Exception as e:
-        logger.error(f'Unable to generate vmlinux: {e}')
+        logger.error(f'Unable to generate vmlinux: {repr(e)}')
 
-@generate.command(help='Generate the pybpf skeleton file.')
+
+@generate.command()
+@click.argument(
+    'bpf',
+    type=click.Path(dir_okay=False, file_okay=True, exists=True),
+)
+@click.argument(
+    'outdir',
+    type=click.Path(dir_okay=True, file_okay=False, exists=True),
+    default='.'
+)
 @click.help_option('-h', '--help')
-def skeleton():
-    # TODO
-    pass
+def skeleton(outdir: str, bpf: str):
+    """
+    Generate the pybpf skeleton file from BPF.
+
+    BPF is the path to the compiled BPF object file. If this file does not yet exist, run "pybpf compile" first.
+
+    OUTDIR is the output directory for the skeleton file. If not specified, defaults to '.'
+    """
+    generate_skeleton(bpf, outdir)
