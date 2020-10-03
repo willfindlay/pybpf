@@ -183,6 +183,42 @@ class ProgXdp(ProgBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def attach_xdp(self, *ifnames: str):
+        """
+        Attach the XDP program to interfaces with names @ifnames.
+        """
+        try:
+            from pyroute2 import IPRoute
+        except ImportError:
+            raise ImportError('pyroute2 must be installed before attaching an XDP program') from None
+        ipr = IPRoute()
+        for ifname in ifnames:
+            try:
+                ifindex = ipr.link_lookup(ifname=ifname)[0]
+            except IndexError:
+                raise KeyError(f'No such interface "{ifname}"') from None
+            retval = Lib.bpf_set_link_xdp_fd(ifindex, self._prog_fd, 0)
+        if retval < 0:
+            raise Exception(f'Failed to attach XDP program {self._name} to interface "{ifname}" ({ifindex}): {cerr(retval)}')
+
+    def remove_xdp(self, *ifnames: str):
+        """
+        Remove all XDP programs from interfaces with names @ifnames.
+        """
+        try:
+            from pyroute2 import IPRoute
+        except ImportError:
+            raise ImportError('pyroute2 must be installed before removing XDP programs') from None
+        ipr = IPRoute()
+        for ifname in ifnames:
+            try:
+                ifindex = ipr.link_lookup(ifname=ifname)[0]
+            except IndexError:
+                raise KeyError(f'No such interface "{ifname}"') from None
+            retval = Lib.bpf_set_link_xdp_fd(ifindex, -1, 0)
+        if retval < 0:
+            raise Exception(f'Failed to remove XDP program {self._name} to interface "{ifname}" ({ifindex}): {cerr(retval)}')
+
 @register_prog(BPFProgType.PERF_EVENT)
 class ProgPerfEvent(ProgBase):
     def __init__(self, *args, **kwargs):

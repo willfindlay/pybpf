@@ -234,6 +234,14 @@ class Lib:
     def bpf_prog_test_run(prog_fd: ct.c_int, repeat: ct.c_int, data: ct.c_void_p, data_size: ct.c_uint32, data_out: ct.c_void_p, data_out_size: ct.POINTER(ct.c_uint32), retval: ct.POINTER(ct.c_uint32), duration: ct.POINTER(ct.c_uint32)) -> ct.c_int:
         pass
 
+    @libbpf_fn('bpf_program__attach_xdp')
+    def bpf_program_attach_xdp(prog: ct.c_void_p, ifindex: ct.c_int) -> ct.c_void_p:
+        pass
+
+    @libbpf_fn('bpf_set_link_xdp_fd')
+    def bpf_set_link_xdp_fd(ifindex: ct.c_int, progfd: ct.c_int, flags: ct.c_uint32) -> ct.c_int:
+        pass
+
     # ====================================================================
     # Uprobe Attachment
     # ====================================================================
