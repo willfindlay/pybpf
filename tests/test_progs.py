@@ -31,6 +31,7 @@ from pybpf.maps import create_map
 from pybpf.utils import project_path, which
 
 BPF_SRC = project_path('tests/bpf_src/prog.bpf.c')
+XDP_SRC = project_path('tests/bpf_src/xdp.bpf.c')
 
 def test_progs_smoke(skeleton):
     """
@@ -66,3 +67,25 @@ def test_prog_invoke(skeleton):
     assert skel.progs.fexit_modify_return_test.invoke() == 0
 
     assert skel.progs.fentry_modify_return_test.invoke() == 0
+
+def test_xdp_smoke(skeleton):
+    """
+    Make sure XDP progs load properly.
+    """
+    skel = skeleton(XDP_SRC)
+
+    EXPECTED_PROG_COUNT = 1
+
+    if len(skel.progs) > EXPECTED_PROG_COUNT:
+        pytest.xfail(f'EXPECTED_PROG_COUNT should be updated to {len(skel.progs)}')
+
+    assert len(skel.progs) == EXPECTED_PROG_COUNT
+
+    skel.progs.xdp_prog.attach_xdp('lo')
+    skel.maps.packet_count.register_value_type(ct.c_int)
+
+    subprocess.run('ping -c 5 localhost'.split())
+
+    assert skel.maps.packet_count[0].value > 0
+
+    skel.progs.xdp_prog.remove_xdp('lo')

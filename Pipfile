@@ -4,6 +4,7 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+pyroute2 = "*"
 jedi = "*"
 pylint = "*"
 pytest = "*"
@@ -11,7 +12,6 @@ wrapt = {editable = true, path = "."}
 
 [packages]
 click = "*"
-toml = "*"
 
 [requires]
 python_version = "3.8"
