@@ -123,6 +123,12 @@ class ProgBase(ABC):
         if not self._link:
             raise Exception(f'Failed to attach BPF program {self._name}: {cerr()}')
 
+    def fd(self) -> int:
+        return self._prog_fd
+
+    def name(self) -> str:
+        return self._name
+
     def invoke(self, data: ct.Structure = None):
         """
         Invoke the BPF program once and capture and return its return value.

@@ -33,6 +33,7 @@ from pybpf.utils import project_path, which
 BPF_SRC = project_path('tests/bpf_src/prog.bpf.c')
 XDP_SRC = project_path('tests/bpf_src/xdp.bpf.c')
 
+
 def test_progs_smoke(skeleton):
     """
     Make sure progs load properly.
@@ -46,6 +47,7 @@ def test_progs_smoke(skeleton):
 
     assert len(skel.progs) == EXPECTED_PROG_COUNT
 
+
 def test_bad_prog(skeleton):
     """
     Test that accessing a non-existent prog raises a KeyError.
@@ -58,6 +60,7 @@ def test_bad_prog(skeleton):
     with pytest.raises(KeyError):
         skel.progs['foo']
 
+
 def test_prog_invoke(skeleton):
     """
     Test .invoke() method on supported program types.
@@ -67,6 +70,7 @@ def test_prog_invoke(skeleton):
     assert skel.progs.fexit_modify_return_test.invoke() == 0
 
     assert skel.progs.fentry_modify_return_test.invoke() == 0
+
 
 def test_xdp_smoke(skeleton):
     """
@@ -84,7 +88,7 @@ def test_xdp_smoke(skeleton):
     skel.progs.xdp_prog.attach_xdp('lo')
     skel.maps.packet_count.register_value_type(ct.c_int)
 
-    subprocess.run('ping -c 5 localhost'.split())
+    subprocess.run('ping -c 1 localhost'.split())
 
     assert skel.maps.packet_count[0].value > 0
 

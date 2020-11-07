@@ -34,51 +34,66 @@ from pybpf.utils import cerr, force_bytes
 # Maps map type to map class
 maptype2class = {}
 
+
 def register_map(map_type: BPFMapType):
     """
     Decorates a class to register if with the corresponding :IntEnum:BPFMapType.
     """
+
     def inner(_map: Type[MapBase]):
         maptype2class[map_type] = _map
         return _map
+
     return inner
+
 
 class BPFMapType(IntEnum):
     """
     Integer enum representing BPF map types.
     """
-    UNSPEC                = 0
-    HASH                  = auto()
-    ARRAY                 = auto()
-    PROG_ARRAY            = auto() # TODO
-    PERF_EVENT_ARRAY      = auto() # TODO
-    PERCPU_HASH           = auto()
-    PERCPU_ARRAY          = auto()
-    STACK_TRACE           = auto() # TODO
-    CGROUP_ARRAY          = auto()
-    LRU_HASH              = auto()
-    LRU_PERCPU_HASH       = auto()
-    LPM_TRIE              = auto() # TODO
-    ARRAY_OF_MAPS         = auto() # TODO
-    HASH_OF_MAPS          = auto() # TODO
-    DEVMAP                = auto() # TODO
-    SOCKMAP               = auto() # TODO
-    CPUMAP                = auto() # TODO
-    XSKMAP                = auto() # TODO
-    SOCKHASH              = auto() # TODO
-    CGROUP_STORAGE        = auto()
-    REUSEPORT_SOCKARRAY   = auto() # TODO
-    PERCPU_CGROUP_STORAGE = auto() # TODO
-    QUEUE                 = auto()
-    STACK                 = auto()
-    SK_STORAGE            = auto() # TODO
-    DEVMAP_HASH           = auto() # TODO
-    STRUCT_OPS            = auto() # TODO
-    RINGBUF               = auto()
-    # This must be the last entry
-    MAP_TYPE_UNKNOWN      = auto()
 
-def create_map(skel, _map: ct.c_voidp, map_fd: ct.c_int, mtype: ct.c_int, ksize: ct.c_int, vsize: ct.c_int, max_entries: ct.c_int) -> Union[Type[MapBase], Type[QueueStack], Ringbuf]:
+    UNSPEC = 0
+    HASH = auto()
+    ARRAY = auto()
+    PROG_ARRAY = auto()  # TODO
+    PERF_EVENT_ARRAY = auto()  # TODO
+    PERCPU_HASH = auto()
+    PERCPU_ARRAY = auto()
+    STACK_TRACE = auto()  # TODO
+    CGROUP_ARRAY = auto()
+    LRU_HASH = auto()
+    LRU_PERCPU_HASH = auto()
+    LPM_TRIE = auto()  # TODO
+    ARRAY_OF_MAPS = auto()  # TODO
+    HASH_OF_MAPS = auto()  # TODO
+    DEVMAP = auto()  # TODO
+    SOCKMAP = auto()  # TODO
+    CPUMAP = auto()  # TODO
+    XSKMAP = auto()  # TODO
+    SOCKHASH = auto()  # TODO
+    CGROUP_STORAGE = auto()
+    REUSEPORT_SOCKARRAY = auto()  # TODO
+    PERCPU_CGROUP_STORAGE = auto()  # TODO
+    QUEUE = auto()
+    STACK = auto()
+    SK_STORAGE = auto()  # TODO
+    DEVMAP_HASH = auto()  # TODO
+    STRUCT_OPS = auto()  # TODO
+    RINGBUF = auto()
+    INODE_STORAGE = auto()
+    # This must be the last entry
+    MAP_TYPE_UNKNOWN = auto()
+
+
+def create_map(
+    skel,
+    _map: ct.c_voidp,
+    map_fd: ct.c_int,
+    mtype: ct.c_int,
+    ksize: ct.c_int,
+    vsize: ct.c_int,
+    max_entries: ct.c_int,
+) -> Union[Type[MapBase], Type[QueueStack], Ringbuf]:
     """
     Create a BPF map object from a map description.
     """
@@ -100,11 +115,15 @@ def create_map(skel, _map: ct.c_voidp, map_fd: ct.c_int, mtype: ct.c_int, ksize:
     # Fall through
     raise ValueError(f'No map implementation for {map_type.name}')
 
+
 class MapBase(MutableMapping):
     """
     A base class for BPF maps.
     """
-    def __init__(self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int):
+
+    def __init__(
+        self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int
+    ):
         self._map = _map
         self._map_fd = map_fd
         self._ksize = ksize
@@ -115,17 +134,26 @@ class MapBase(MutableMapping):
         self.ValueType = self._no_value_type
 
     def _no_key_type(self, *args, **kwargs):
-        raise Exception(f'Please define a ctype for key using {self.__class__.__name__}.register_key_type(ctype)')
+        raise Exception(
+            f'Please define a ctype for key using {self.__class__.__name__}.register_key_type(ctype)'
+        )
 
     def _no_value_type(self, *args, **kwargs):
-        raise Exception(f'Please define a ctype for value using {self.__class__.__name__}.register_value_type(ctype)')
+        raise Exception(
+            f'Please define a ctype for value using {self.__class__.__name__}.register_value_type(ctype)'
+        )
+
+    def fd(self) -> int:
+        return self._map_fd
 
     def register_key_type(self, _type: ct.Structure):
         """
         Register a new ctype as a key type.
         """
         if ct.sizeof(_type) != self._ksize:
-            raise Exception(f'Mismatch between key size ({self._ksize}) and size of key type ({ct.sizeof(_type)})')
+            raise Exception(
+                f'Mismatch between key size ({self._ksize}) and size of key type ({ct.sizeof(_type)})'
+            )
         self.KeyType = _type
 
     def register_value_type(self, _type: ct.Structure):
@@ -133,7 +161,9 @@ class MapBase(MutableMapping):
         Register a new ctype as a value type.
         """
         if ct.sizeof(_type) != self._vsize:
-            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
+            raise Exception(
+                f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})'
+            )
         self.ValueType = _type
 
     def capacity(self) -> int:
@@ -157,6 +187,7 @@ class MapBase(MutableMapping):
         A helper inner class to iterate through map keys.
         This class is taken from https://github.com/iovisor/bcc/blob/master/src/python/bcc/table.py
         """
+
         def __init__(self, _map: MapBase):
             self.map = _map
             self.key = None
@@ -180,7 +211,9 @@ class MapBase(MutableMapping):
         if key is None:
             ret = Lib.bpf_map_get_next_key(self._map_fd, None, ct.byref(next_key))
         else:
-            ret = Lib.bpf_map_get_next_key(self._map_fd, ct.byref(key), ct.byref(next_key))
+            ret = Lib.bpf_map_get_next_key(
+                self._map_fd, ct.byref(key), ct.byref(next_key)
+            )
 
         if ret < 0:
             raise StopIteration()
@@ -244,7 +277,9 @@ class MapBase(MutableMapping):
             value = self.ValueType(value)
         except TypeError:
             pass
-        ret = Lib.bpf_map_update_elem(self._map_fd, ct.byref(key), ct.byref(value), flags)
+        ret = Lib.bpf_map_update_elem(
+            self._map_fd, ct.byref(key), ct.byref(value), flags
+        )
         if ret < 0:
             raise KeyError(f'Unable to update item: {cerr(ret)}')
 
@@ -283,8 +318,10 @@ class MapBase(MutableMapping):
     def __eq__(self, other):
         return id(self) == id(other)
 
+
 class PerCpuMixin(ABC):
-    _vsize = None # type: int
+    _vsize = None  # type: int
+
     def __init__(self, *args, **kwargs):
         self._num_cpus = Lib.num_possible_cpus()
         try:
@@ -293,11 +330,10 @@ class PerCpuMixin(ABC):
             raise Exception('PerCpuMixin without value size?!')
         # Force aligned value size
         if alignment != 0:
-            self._vsize += (8 - alignment)
+            self._vsize += 8 - alignment
             # Make sure we are now aligned
             alignment = self._vsize % 8
             assert alignment == 0
-
 
     def register_value_type(self, _type: ct.Structure):
         """
@@ -311,33 +347,58 @@ class PerCpuMixin(ABC):
         elif ct.sizeof(_type) % 8:
             raise ValueError('Value size for percpu maps must be 8-byte aligned')
         if ct.sizeof(_type) != self._vsize:
-            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
+            raise Exception(
+                f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})'
+            )
         self.ValueType = _type * self._num_cpus
+
+
+class LocalStorageBase(MapBase, ABC):
+    """
+    A base class for local storage maps. They always have a fixed key type,
+    which must be specified in the child class constructor. Elements are
+    garbage collected by the kernel.
+    """
+
+    def __init__(self, *args, **kwargs):
+        MapBase.__init__(*args, **kwargs)
+
+    def register_key_type(self, _type: ct.Structure):
+        raise NotImplementedError(
+            'Local storage maps always have a specific key type. This cannot be changed'
+        )
+
 
 @register_map(BPFMapType.HASH)
 class Hash(MapBase):
     """
     A BPF hashmap.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 @register_map(BPFMapType.LRU_HASH)
 class LruHash(Hash):
     """
     A BPF hashmap that discards least recently used entries when it is full.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 @register_map(BPFMapType.PERCPU_HASH)
 class PerCpuHash(PerCpuMixin, Hash):
     """
     A BPF hashmap that maintains unsynchonized copies per cpu.
     """
+
     def __init__(self, *args, **kwargs):
         Hash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
+
 
 @register_map(BPFMapType.LRU_PERCPU_HASH)
 class LruPerCpuHash(PerCpuMixin, LruHash):
@@ -345,24 +406,30 @@ class LruPerCpuHash(PerCpuMixin, LruHash):
     A BPF hashmap that maintains unsynchonized copies per cpu and discards least
     recently used entries when it is full.
     """
+
     def __init__(self, *args, **kwargs):
         LruHash.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
+
 
 @register_map(BPFMapType.ARRAY)
 class Array(MapBase):
     """
     A BPF array. Keys are always ct.c_uint.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.KeyType = ct.c_uint
 
     def register_key_type(self, _type: ct.Structure):
-        raise NotImplementedError('Arrays always have key type ct.c_uint. This cannot be changed')
+        raise NotImplementedError(
+            'Arrays always have key type ct.c_uint. This cannot be changed'
+        )
 
     def __delitem__(self, key):
         self.__setitem__(key, self.ValueType())
+
 
 @register_map(BPFMapType.CGROUP_ARRAY)
 class CgroupArray(Array):
@@ -371,6 +438,7 @@ class CgroupArray(Array):
     populate this map by getting a cgroup-backed fd by calling open(2) on
     a cgroup directory. Then, update the map to contain the cgroup fd.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -378,10 +446,14 @@ class CgroupArray(Array):
         self.ValueType = ct.c_uint
 
     def register_value_type(self, _type: ct.Structure):
-        raise NotImplementedError('Cgroup always have value type ct.c_uint. This cannot be changed')
+        raise NotImplementedError(
+            'Cgroup always have value type ct.c_uint. This cannot be changed'
+        )
 
     def register_key_type(self, _type: ct.Structure):
-        raise NotImplementedError('Cgroup always have key type ct.c_uint. This cannot be changed')
+        raise NotImplementedError(
+            'Cgroup always have key type ct.c_uint. This cannot be changed'
+        )
 
     def append_cgroup(self, cgroup_path: str) -> int:
         """
@@ -397,37 +469,52 @@ class CgroupArray(Array):
         self.__setitem__(key, fd)
         return key
 
+
 @register_map(BPFMapType.PERCPU_ARRAY)
 class PerCpuArray(PerCpuMixin, Array):
     """
     A BPF array that maintains unsynchonized copies per cpu. Keys are always
     ct.c_uint.
     """
+
     def __init__(self, *args, **kwargs):
         Array.__init__(self, *args, **kwargs)
         PerCpuMixin.__init__(self, *args, **kwargs)
 
+
 @register_map(BPFMapType.CGROUP_STORAGE)
-class CgroupStorage(MapBase):
+class CgroupStorage(LocalStorageBase):
     """
     A BPF map that maintains per-cgroup value storage. Elements of this map
     may not be created or deleted. Instead, they are automatically created
     or deleted when a BPF program is attached to a cgroup.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # TODO: what is key type?
 
-    def register_key_type(self, _type: ct.Structure):
-        raise NotImplementedError('Cgroup local storage maps always have a specific key type. This cannot be changed')
 
-    def __delitem__(self, key):
-        raise NotImplementedError('Local storage maps may not delete their elements')
+@register_map(BPFMapType.INODE_STORAGE)
+class InodeStorage(LocalStorageBase):
+    """
+    A BPF map that maintains per-inode value storage.
+    Elements are garbage collected with their inodes.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.KeyType = ct.c_uint64
+
 
 class QueueStack(ABC):
     """
     A base class for BPF stacks and queues.
     """
-    def __init__(self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int):
+
+    def __init__(
+        self, _map: ct.c_void_p, map_fd: int, ksize: int, vsize: int, max_entries: int
+    ):
         self._map = _map
         self._map_fd = map_fd
         self._ksize = ksize
@@ -437,14 +524,21 @@ class QueueStack(ABC):
         self.ValueType = self._no_value_type
 
     def _no_value_type(self, *args, **kwargs):
-        raise Exception(f'Please define a ctype for value using {self.__class__.__name__}.register_value_type(ctype)')
+        raise Exception(
+            f'Please define a ctype for value using {self.__class__.__name__}.register_value_type(ctype)'
+        )
+
+    def fd(self) -> int:
+        return self._map_fd
 
     def register_value_type(self, _type: ct.Structure):
         """
         Register a new ctype as a value type.
         """
         if ct.sizeof(_type) != self._vsize:
-            raise Exception(f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})')
+            raise Exception(
+                f'Mismatch between value size ({self._vsize}) and size of value type ({ct.sizeof(_type)})'
+            )
         self.ValueType = _type
 
     def capacity(self) -> int:
@@ -485,27 +579,33 @@ class QueueStack(ABC):
             raise KeyError(f'Unable to peek value: {cerr(ret)}')
         return value
 
+
 @register_map(BPFMapType.QUEUE)
 class Queue(QueueStack):
     """
     A BPF Queue map. Implements a FIFO data structure without a key type.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 @register_map(BPFMapType.STACK)
 class Stack(QueueStack):
     """
     A BPF Stack map. Implements a LIFO data structure without a key type.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 class Ringbuf:
     """
     A ringbuf map for passing per-event data to userspace. This class should not
     be instantiated directly. Instead, it is created automatically by the BPFObject.
     """
+
     def __init__(self, skel, _map: ct.c_void_p, map_fd: int):
         self._skel = skel
         self._map = _map
@@ -549,9 +649,11 @@ class Ringbuf:
                 except Exception:
                     ret = 0
                 return ret
+
             # Open ringbug with provided callback
             self._open(self.map_fd, wrapper)
             return wrapper
+
         return inner
 
     def _open(self, map_fd: ct.c_int, func: Callable, ctx: ct.c_void_p = None) -> None:
@@ -569,6 +671,8 @@ class Ringbuf:
         else:
             ret = Lib.ring_buffer_add(self._skel._ringbuf_mgr, map_fd, func, ctx)
             if ret != 0:
-                raise Exception(f'Failed to add ringbuf to ring buffer manager: {cerr(ret)}')
+                raise Exception(
+                    f'Failed to add ringbuf to ring buffer manager: {cerr(ret)}'
+                )
         # Keep a refcnt so that our function doesn't get cleaned up
         self._cb = func

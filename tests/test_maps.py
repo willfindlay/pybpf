@@ -33,6 +33,7 @@ from pybpf.utils import project_path, which
 
 BPF_SRC = project_path('tests/bpf_src')
 
+
 def test_ringbuf(skeleton):
     """
     Test that ringbuf maps can pass data to userspace from BPF programs.
@@ -72,6 +73,7 @@ def test_ringbuf(skeleton):
     assert res == 5
     assert res2 == 10
 
+
 def test_bad_ringbuf(skeleton):
     """
     Test that attempting to register a callback for a non-existent ringbuf
@@ -80,9 +82,11 @@ def test_bad_ringbuf(skeleton):
     skel = skeleton(os.path.join(BPF_SRC, 'ringbuf.bpf.c'))
 
     with pytest.raises(KeyError):
+
         @skel.maps.ringbuf3.callback(ct.c_int)
         def _callback(ctx, data, size):
             print('unreachable!')
+
 
 def test_maps_smoke(skeleton):
     """
@@ -97,6 +101,7 @@ def test_maps_smoke(skeleton):
 
     assert len(skel.maps) == EXPECTED_MAP_COUNT
 
+
 def test_bad_map(skeleton):
     """
     Test that accessing a non-existent map raises a KeyError.
@@ -108,6 +113,7 @@ def test_bad_map(skeleton):
 
     with pytest.raises(KeyError):
         skel.maps['foo']
+
 
 def test_hash(skeleton):
     """
@@ -155,6 +161,7 @@ def test_hash(skeleton):
         with pytest.raises(KeyError):
             _hash[i]
 
+
 def test_percpu_hash(skeleton):
     """
     Test BPF_PERCPU_HASH.
@@ -184,6 +191,7 @@ def test_percpu_hash(skeleton):
     percpu_hash.clear()
 
     assert len(percpu_hash) == 0
+
 
 def test_lru_hash(skeleton):
     """
@@ -217,6 +225,7 @@ def test_lru_hash(skeleton):
 
     assert len(lru_hash) == 0
 
+
 def test_lru_percpu_hash(skeleton):
     """
     Test BPF_LRU_PERCPU_HASH.
@@ -247,6 +256,7 @@ def test_lru_percpu_hash(skeleton):
     lru_percpu_hash.clear()
 
     assert len(lru_percpu_hash) == 0
+
 
 def test_array(skeleton):
     """
@@ -295,6 +305,7 @@ def test_array(skeleton):
     for i in range(array.capacity()):
         array[i] == 0
 
+
 def test_percpu_array(skeleton):
     """
     Test BPF_PERCPU_ARRAY.
@@ -333,11 +344,13 @@ def test_percpu_array(skeleton):
         for v in percpu_array[i]:
             assert v == 0
 
+
 def test_prog_array(skeleton):
     """
     Test BPF_PROG_ARRAY.
     """
     pytest.skip('TODO')
+
 
 def test_perf_event_array(skeleton):
     """
@@ -345,11 +358,13 @@ def test_perf_event_array(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_stack_trace(skeleton):
     """
     Test BPF_STACK_TRACE.
     """
     pytest.skip('TODO')
+
 
 def test_cgroup_array(skeleton):
     """
@@ -357,11 +372,13 @@ def test_cgroup_array(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_lpm_trie(skeleton):
     """
     Test BPF_LPM_TRIE.
     """
     pytest.skip('TODO')
+
 
 def test_array_of_maps(skeleton):
     """
@@ -369,11 +386,13 @@ def test_array_of_maps(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_hash_of_maps(skeleton):
     """
     Test BPF_HASH_OF_MAPS.
     """
     pytest.skip('TODO')
+
 
 def test_devmap(skeleton):
     """
@@ -381,11 +400,13 @@ def test_devmap(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_sockmap(skeleton):
     """
     Test BPF_SOCKMAP.
     """
     pytest.skip('TODO')
+
 
 def test_cpumap(skeleton):
     """
@@ -393,11 +414,13 @@ def test_cpumap(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_xskmap(skeleton):
     """
     Test BPF_XSKMAP.
     """
     pytest.skip('TODO')
+
 
 def test_sockhash(skeleton):
     """
@@ -405,11 +428,13 @@ def test_sockhash(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_cgroup_storage(skeleton):
     """
     Test BPF_CGROUP_STORAGE.
     """
     pytest.skip('TODO')
+
 
 def test_reuseport_sockarray(skeleton):
     """
@@ -417,11 +442,13 @@ def test_reuseport_sockarray(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_percpu_cgroup_storage(skeleton):
     """
     Test BPF_PERCPU_CGROUP_STORAGE.
     """
     pytest.skip('TODO')
+
 
 def test_queue(skeleton):
     """
@@ -449,6 +476,7 @@ def test_queue(skeleton):
     with pytest.raises(KeyError):
         queue.pop()
 
+
 def test_stack(skeleton):
     """
     Test BPF_STACK.
@@ -475,11 +503,13 @@ def test_stack(skeleton):
     with pytest.raises(KeyError):
         stack.pop()
 
+
 def test_sk_storage(skeleton):
     """
     Test BPF_SK_STORAGE.
     """
     pytest.skip('TODO')
+
 
 def test_devmap_hash(skeleton):
     """
@@ -487,9 +517,17 @@ def test_devmap_hash(skeleton):
     """
     pytest.skip('TODO')
 
+
 def test_struct_ops(skeleton):
     """
     Test BPF_STRUCT_OPS.
     """
     pytest.skip('TODO')
 
+
+def test_inode_storage(skeleton):
+    """
+    Test BPF_INODE_STORAGE.
+    """
+    skel = skeleton(os.path.join(BPF_SRC, 'local_storage.bpf.c'))
+    pass
