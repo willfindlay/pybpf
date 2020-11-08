@@ -361,7 +361,7 @@ class LocalStorageBase(MapBase, ABC):
     """
 
     def __init__(self, *args, **kwargs):
-        MapBase.__init__(*args, **kwargs)
+        MapBase.__init__(self, *args, **kwargs)
 
     def register_key_type(self, _type: ct.Structure):
         raise NotImplementedError(

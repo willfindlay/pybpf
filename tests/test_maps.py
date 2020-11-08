@@ -530,4 +530,11 @@ def test_inode_storage(skeleton):
     Test BPF_INODE_STORAGE.
     """
     skel = skeleton(os.path.join(BPF_SRC, 'local_storage.bpf.c'))
-    pass
+
+    ils = skel.maps.inode_storage
+    test = skel.maps.test_array
+    test.register_value_type(ct.c_int)
+
+    subprocess.check_output('touch /tmp/pybpf/foo.txt'.split())
+    subprocess.check_output('rm /tmp/pybpf/foo.txt'.split())
+    assert test[0].value == 12
